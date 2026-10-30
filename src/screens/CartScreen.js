@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { EmptyState } from '../components/EmptyState';
 import { QuantitySelector } from '../components/QuantitySelector';
+import { ProductImage } from '../components/ProductImage';
 import { useCart } from '../contexts/CartContext';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -30,7 +31,7 @@ export function CartScreen({ navigation }) {
           title="A sacola está esperando"
           description="Encontre aquele item especial para acompanhar teu próximo mate."
         />
-        <Pressable onPress={() => navigation.navigate('Início')} style={styles.continueButton}>
+        <Pressable onPress={() => navigation.navigate('Home')} style={styles.continueButton}>
           <Text style={styles.continueButtonText}>Explorar produtos</Text>
         </Pressable>
       </View>
@@ -46,7 +47,12 @@ export function CartScreen({ navigation }) {
         {items.map((item) => (
           <View key={item.key} style={styles.itemCard}>
             <View style={[styles.productArt, { backgroundColor: item.product.backdrop }]}>
-              <Text style={styles.productEmoji}>{item.product.emoji}</Text>
+              <ProductImage
+                source={item.product.image}
+                style={styles.cartProductImage}
+                fallbackEmoji={item.product.emoji || '🧉'}
+                accessibilityLabel={item.product.name}
+              />
             </View>
             <View style={styles.itemDetails}>
               <View style={styles.itemTitleRow}>
@@ -128,7 +134,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  productEmoji: { fontSize: 42 },
+  cartProductImage: { width: '100%', height: '100%' },
   itemDetails: { flex: 1, marginLeft: 12, justifyContent: 'center' },
   itemTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   itemName: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: '700' },

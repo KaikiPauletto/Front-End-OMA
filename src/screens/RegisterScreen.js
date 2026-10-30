@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import { DEMO_MODE } from '../config/appConfig';
+import { enterDemoMode } from '../utils/enterDemoMode';
 
 export function RegisterScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -9,6 +11,11 @@ export function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
 
   function handleSubmit() {
+    if (DEMO_MODE) {
+      enterDemoMode(navigation);
+      return;
+    }
+
     if (!name.trim() || !email.trim() || !password) {
       Alert.alert('Dados incompletos', 'Preencha os campos para continuar.');
       return;
@@ -61,7 +68,9 @@ export function RegisterScreen({ navigation }) {
         <Text style={styles.submitText}>Criar conta</Text>
       </Pressable>
       <Text style={styles.footnote}>
-        Campos e regras de senha são provisórios até a definição do contrato do backend.
+        {DEMO_MODE
+          ? 'Modo demonstração: continuar não cria uma conta nem envia os dados.'
+          : 'O cadastro será habilitado após a definição dos campos e integração com o backend.'}
       </Text>
     </View>
   );

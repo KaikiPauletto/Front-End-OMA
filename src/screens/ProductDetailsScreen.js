@@ -8,9 +8,13 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { QuantitySelector } from '../components/QuantitySelector';
+import { CartAddedBar } from '../components/CartAddedBar';
+import { ProductImage } from '../components/ProductImage';
 import { useCart } from '../contexts/CartContext';
 import { products } from '../data/products';
+import { getCategoryLabel } from '../data/categories';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
@@ -18,7 +22,9 @@ export function ProductDetailsScreen({ navigation, route }) {
   const product = products.find((item) => item.id === route.params?.productId);
   const [variant, setVariant] = useState(product?.variants?.[0] ?? null);
   const [quantity, setQuantity] = useState(1);
-  const { addItem } = useCart();
+  const [cartConfirmationVisible, setCartConfirmationVisible] = useState(Boolean(route.params?.justAdded));
+  const { addItem, itemCount } = useCart();
+  const insets = useSafeAreaInsets();
 
   if (!product) {
     return (
@@ -39,10 +45,7 @@ export function ProductDetailsScreen({ navigation, route }) {
     const result = addItem(product, variant, quantity);
 
     if (result?.ok) {
-      Alert.alert('Pronto!', 'Produto adicionado à sua sacola.', [
-        { text: 'Continuar comprando', style: 'cancel' },
-        { text: 'Ver sacola', onPress: () => navigation.navigate('MainTabs', { screen: 'Sacola' }) },
-      ]);
+      setCartConfirmationVisible(true);
     } else {
       Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
     }
@@ -52,10 +55,15 @@ export function ProductDetailsScreen({ navigation, route }) {
     <View style={styles.screen}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={[styles.artwork, { backgroundColor: product.backdrop }]}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+          <ProductImage
+            source={product.image}
+            style={styles.productImage}
+            fallbackEmoji={product.emoji || '🧉'}
+            accessibilityLabel={product.name}
+          />
+          <Pressable onPress={() => navigation.goBack()} style={[styles.backButton, { top: insets.top + 12 }]}>
             <Ionicons name="arrow-back" size={21} color={colors.forest} />
           </Pressable>
-          <Text style={styles.emoji}>{product.emoji}</Text>
           {product.type === 'UNITÁRIO' ? (
             <View style={styles.uniqueTag}>
               <Text style={styles.uniqueText}>PEÇA ÚNICA</Text>
@@ -64,7 +72,7 @@ export function ProductDetailsScreen({ navigation, route }) {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.category}>{product.category.toUpperCase()}</Text>
+          <Text style={styles.category}>{getCategoryLabel(product.category).toUpperCase()}</Text>
           <Text style={styles.name}>{product.name}</Text>
           <Text style={styles.price}>{formatCurrency(unitPrice)}</Text>
           <Text style={styles.description}>{product.description}</Text>
@@ -115,26 +123,33 @@ export function ProductDetailsScreen({ navigation, route }) {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomBar}>
+      {!cartConfirmationVisible ? <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View>
           <Text style={styles.totalLabel}>Valor demonstrativo</Text>
           <Text style={styles.total}>{formatCurrency(unitPrice * quantity)}</Text>
         </View>
         <Pressable disabled={stock <= 0} onPress={handleAdd} style={[styles.addButton, stock <= 0 && styles.disabledButton]}>
           <Ionicons name="bag-add-outline" size={18} color={colors.white} />
-          <Text style={styles.addButtonText}>Adicionar</Text>
+          <Text style={styles.addButtonText}>Adicionar ao carrinho</Text>
         </Pressable>
-      </View>
+      </View> : null}
+      <CartAddedBar
+        visible={cartConfirmationVisible}
+        itemCount={itemCount}
+        onClose={() => setCartConfirmationVisible(false)}
+        onContinue={() => { setCartConfirmationVisible(false); navigation.navigate('MainTabs', { screen: 'Carrinho' }); }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
-  artwork: { height: 330, alignItems: 'center', justifyContent: 'center' },
+  artwork: { height: 330, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  productImage: { width: '100%', height: '100%' },
   backButton: {
     position: 'absolute',
-    top: 54,
+    top: 12,
     left: 20,
     width: 43,
     height: 43,
@@ -144,7 +159,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
-  emoji: { fontSize: 122 },
   uniqueTag: {
     position: 'absolute',
     bottom: 22,
@@ -154,7 +168,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   uniqueText: { color: colors.forest, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  content: { padding: 23, paddingBottom: 30 },
+  content: { padding: 18, paddingBottom: 30 },
   category: { color: colors.clay, fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
   name: { color: colors.ink, fontSize: 27, fontWeight: '800', marginTop: 7 },
   price: { color: colors.forest, fontSize: 21, fontWeight: '800', marginTop: 8 },
@@ -178,9 +192,9 @@ const styles = StyleSheet.create({
   typeDescription: { color: colors.muted, fontSize: 11, marginTop: 6 },
   quantityRow: { marginTop: 21, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bottomBar: {
-    paddingHorizontal: 22,
+    paddingHorizontal: 18,
     paddingTop: 13,
-    paddingBottom: 24,
+    paddingBottom: 14,
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
@@ -191,7 +205,7 @@ const styles = StyleSheet.create({
   totalLabel: { color: colors.muted, fontSize: 10 },
   total: { color: colors.forest, fontSize: 19, fontWeight: '800', marginTop: 2 },
   addButton: {
-    minWidth: 154,
+    minWidth: 168,
     height: 49,
     backgroundColor: colors.forest,
     borderRadius: 15,
@@ -201,7 +215,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   disabledButton: { opacity: 0.45 },
-  addButtonText: { color: colors.white, fontSize: 13, fontWeight: '800' },
+  addButtonText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   notFoundText: { color: colors.ink, fontSize: 16, fontWeight: '700' },
   backLink: { color: colors.clay, marginTop: 12, fontWeight: '700' },

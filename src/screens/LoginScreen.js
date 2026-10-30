@@ -2,12 +2,19 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import { DEMO_MODE } from '../config/appConfig';
+import { enterDemoMode } from '../utils/enterDemoMode';
 
 export function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   function handleSubmit() {
+    if (DEMO_MODE) {
+      enterDemoMode(navigation);
+      return;
+    }
+
     if (!email.trim() || !password) {
       Alert.alert('Dados incompletos', 'Informe seu e-mail e sua senha.');
       return;
@@ -65,7 +72,9 @@ export function LoginScreen({ navigation }) {
         <Text style={styles.registerText}>Ainda não tem conta? <Text style={styles.registerAction}>Criar conta</Text></Text>
       </Pressable>
       <Text style={styles.footnote}>
-        Esta tela é apenas a estrutura visual. As credenciais ainda não são enviadas nem armazenadas.
+        {DEMO_MODE
+          ? 'Modo demonstração: entre sem preencher os campos. Nenhuma autenticação será realizada.'
+          : 'A autenticação será habilitada quando a integração com o backend estiver disponível.'}
       </Text>
     </View>
   );
