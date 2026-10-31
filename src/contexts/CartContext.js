@@ -91,6 +91,10 @@ export function CartProvider({ children }) {
     setItems((currentItems) => currentItems.filter((item) => item.key !== key));
   }
 
+  function clearCart() {
+    setItems([]);
+  }
+
   const value = useMemo(
     () => ({
       items,
@@ -102,6 +106,7 @@ export function CartProvider({ children }) {
       addItem,
       updateQuantity,
       removeItem,
+      clearCart,
     }),
     [items],
   );
