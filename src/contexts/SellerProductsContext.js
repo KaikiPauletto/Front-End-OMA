@@ -35,7 +35,16 @@ export function SellerProductsProvider({ children }) {
     ]);
   }
 
-  const value = useMemo(() => ({ products, addProduct }), [products]);
+  function removeProduct(productId) {
+    setProducts((currentProducts) =>
+      currentProducts.filter((product) => product.id !== productId),
+    );
+  }
+
+  const value = useMemo(
+    () => ({ products, addProduct, removeProduct }),
+    [products],
+  );
 
   return (
     <SellerProductsContext.Provider value={value}>

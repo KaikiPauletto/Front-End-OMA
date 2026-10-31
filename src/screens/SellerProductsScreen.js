@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ProductImage } from '../components/ProductImage';
 import { useSellerProducts } from '../contexts/SellerProductsContext';
@@ -6,7 +6,22 @@ import { getCategoryLabel } from '../data/categories';
 import { colors } from '../theme/colors';
 
 export function SellerProductsScreen({ navigation }) {
-  const { products } = useSellerProducts();
+  const { products, removeProduct } = useSellerProducts();
+
+  function confirmProductRemoval(product) {
+    Alert.alert(
+      'Excluir produto',
+      `Deseja excluir "${product.name}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => removeProduct(product.id),
+        },
+      ],
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -42,6 +57,16 @@ export function SellerProductsScreen({ navigation }) {
                       {isAvailable ? 'Disponível' : 'Vendido'}
                     </Text>
                   </View>
+                  {isAvailable ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Excluir ${product.name}`}
+                      onPress={() => confirmProductRemoval(product)}
+                      style={styles.deleteButton}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                    </Pressable>
+                  ) : null}
                 </View>
                 <Text numberOfLines={2} style={styles.productName}>{product.name}</Text>
                 <Text style={styles.category}>{getCategoryLabel(product.category)}</Text>
@@ -84,7 +109,20 @@ const styles = StyleSheet.create({
   },
   productImage: { width: 92, height: 94, borderRadius: 12, backgroundColor: colors.surfaceMuted },
   productDetails: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-  statusRow: { flexDirection: 'row', marginBottom: 5 },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.clayLight,
+  },
   statusBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   availableBadge: { backgroundColor: colors.sage },
   soldBadge: { backgroundColor: colors.clayLight },
