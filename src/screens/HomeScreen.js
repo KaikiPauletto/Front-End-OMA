@@ -24,9 +24,11 @@ import { typography } from '../theme/typography';
 const heroImage = { uri: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/Chimarr%C3%A3o_do_Ga%C3%BAcho.jpg/1280px-Chimarr%C3%A3o_do_Ga%C3%BAcho.jpg' };
 
 const brandPlaceholders = ['Marca 1', 'Marca 2', 'Marca 3', 'Marca 4', 'Marca 5'];
+const PRODUCTS_PER_PAGE = 30;
 
 export function HomeScreen({ navigation }) {
   const [search, setSearch] = useState('');
+  const [productPage, setProductPage] = useState(1);
   const { width: screenWidth } = useWindowDimensions();
   const heroHeight = Math.min(400, Math.max(300, (screenWidth - 40) * (400 / 350)));
   const { addItem } = useCart();
@@ -36,6 +38,15 @@ export function HomeScreen({ navigation }) {
     () => availableProducts.slice().sort((a, b) => (a.salesRank ?? 999) - (b.salesRank ?? 999)).slice(0, 5),
     [availableProducts],
   );
+  const pageCount = Math.ceil(availableProducts.length / PRODUCTS_PER_PAGE);
+  const pageProducts = availableProducts.slice(
+    (productPage - 1) * PRODUCTS_PER_PAGE,
+    productPage * PRODUCTS_PER_PAGE,
+  );
+  const productRows = [];
+  for (let index = 0; index < pageProducts.length; index += 2) {
+    productRows.push(pageProducts.slice(index, index + 2));
+  }
 
   function openSearch() {
     navigation.navigate('Produtos', { searchQuery: search.trim() });
@@ -140,6 +151,56 @@ export function HomeScreen({ navigation }) {
         </View>
 
         <EditorialSection />
+
+        <View style={styles.catalogSection}>
+          <SectionTitle title="Todos os produtos" />
+          <Text style={styles.catalogCount}>
+            {availableProducts.length} {availableProducts.length === 1 ? 'produto disponível' : 'produtos disponíveis'}
+          </Text>
+          <View style={styles.productGrid}>
+            {productRows.map((row, rowIndex) => (
+              <View key={`product-row-${rowIndex}`} style={styles.productGridRow}>
+                {row.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    layout="grid"
+                    onPress={() => openProduct(product)}
+                    onAddToCart={() => handleAddToCart(product)}
+                  />
+                ))}
+                {row.length === 1 ? <View style={styles.gridPlaceholder} /> : null}
+              </View>
+            ))}
+          </View>
+          {pageCount > 1 ? (
+            <View style={styles.pagination}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Página anterior"
+                accessibilityState={{ disabled: productPage === 1 }}
+                disabled={productPage === 1}
+                onPress={() => setProductPage((page) => page - 1)}
+                style={[styles.pageButton, productPage === 1 && styles.pageButtonDisabled]}
+              >
+                <Ionicons name="chevron-back" size={18} color={colors.forest} />
+                <Text style={styles.pageButtonText}>Anterior</Text>
+              </Pressable>
+              <Text style={styles.pageIndicator}>Página {productPage} de {pageCount}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Próxima página"
+                accessibilityState={{ disabled: productPage === pageCount }}
+                disabled={productPage === pageCount}
+                onPress={() => setProductPage((page) => page + 1)}
+                style={[styles.pageButton, productPage === pageCount && styles.pageButtonDisabled]}
+              >
+                <Text style={styles.pageButtonText}>Próxima</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.forest} />
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
       </ScrollView>
     </View>
   );
@@ -234,4 +295,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  catalogSection: { marginTop: 38 },
+  catalogCount: {
+    color: colors.muted,
+    fontFamily: typography.family.body,
+    fontSize: 11,
+    marginHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 14,
+  },
+  productGrid: { paddingHorizontal: 16, gap: 12 },
+  productGridRow: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
+  gridPlaceholder: { flex: 1 },
+  pagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  pageButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+  },
+  pageButtonDisabled: { opacity: 0.45 },
+  pageButtonText: { color: colors.forest, fontSize: 11, fontWeight: '700' },
+  pageIndicator: { color: colors.mutedStrong, fontSize: 11, fontWeight: '600' },
 });
