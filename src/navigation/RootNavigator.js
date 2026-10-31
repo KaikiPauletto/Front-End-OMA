@@ -13,6 +13,8 @@ import { ProductDetailsScreen } from '../screens/ProductDetailsScreen';
 import { ProductsScreen } from '../screens/ProductsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
+import { SellerProductsScreen } from '../screens/SellerProductsScreen';
+import { AddSellerProductScreen } from '../screens/AddSellerProductScreen';
 import { SubcategoriesScreen } from '../screens/SubcategoriesScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { colors } from '../theme/colors';
@@ -21,7 +23,9 @@ import { typography } from '../theme/typography';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function AccountStack() {
+function AccountStack({ route }) {
+  const accountType = route.params?.accountType ?? 'customer';
+
   return (
     <Stack.Navigator
       screenOptions={{
@@ -30,15 +34,22 @@ function AccountStack() {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="ContaHome" component={ProfileScreen} />
+      <Stack.Screen
+        name="ContaHome"
+        component={ProfileScreen}
+        initialParams={{ accountType }}
+      />
       <Stack.Screen name="Pedidos" component={OrdersScreen} />
+      <Stack.Screen name="MinhasVendas" component={SellerProductsScreen} />
+      <Stack.Screen name="AdicionarProduto" component={AddSellerProductScreen} />
     </Stack.Navigator>
   );
 }
 
-function MainTabs() {
+function MainTabs({ route }) {
   const { itemCount } = useCart();
   const insets = useSafeAreaInsets();
+  const accountType = route.params?.accountType ?? 'customer';
 
   return (
     <Tab.Navigator
@@ -85,7 +96,12 @@ function MainTabs() {
           tabBarBadgeStyle: { backgroundColor: colors.clay, color: colors.white, fontSize: 9 },
         }}
       />
-      <Tab.Screen name="Conta" component={AccountStack} options={{ tabBarLabel: 'CONTA' }} />
+      <Tab.Screen
+        name="Conta"
+        component={AccountStack}
+        initialParams={{ accountType }}
+        options={{ tabBarLabel: 'CONTA' }}
+      />
       <Tab.Screen
         name="Categorias"
         component={CategoriesScreen}

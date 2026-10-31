@@ -8,7 +8,16 @@ const options = [
   { icon: 'help-circle-outline', label: 'Ajuda e suporte', destination: null },
 ];
 
-export function ProfileScreen({ navigation }) {
+export function ProfileScreen({ navigation, route }) {
+  const isSeller = route.params?.accountType === 'seller';
+  const profileOptions = isSeller
+    ? [
+        options[0],
+        { icon: 'pricetags-outline', label: 'Minhas vendas', destination: 'MinhasVendas' },
+        ...options.slice(1),
+      ]
+    : options;
+
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>Minha conta</Text>
@@ -17,15 +26,23 @@ export function ProfileScreen({ navigation }) {
           <Ionicons name="person-outline" size={26} color={colors.forest} />
         </View>
         <View style={styles.profileCopy}>
-          <Text style={styles.profileTitle}>Entre para continuar</Text>
-          <Text style={styles.profileDescription}>Acesse seus pedidos e dados de entrega.</Text>
+          <Text style={styles.profileTitle}>
+            {isSeller ? 'Conta de vendedor' : 'Entre para continuar'}
+          </Text>
+          <Text style={styles.profileDescription}>
+            {isSeller
+              ? 'Gerencie seus produtos e acompanhe suas vendas.'
+              : 'Acesse seus pedidos e dados de entrega.'}
+          </Text>
         </View>
-        <Pressable onPress={() => navigation.navigate('Login')} style={styles.loginButton}>
-          <Text style={styles.loginText}>Entrar</Text>
-        </Pressable>
+        {!isSeller ? (
+          <Pressable onPress={() => navigation.navigate('Login')} style={styles.loginButton}>
+            <Text style={styles.loginText}>Entrar</Text>
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.menu}>
-        {options.map((option) => (
+        {profileOptions.map((option) => (
           <Pressable
             key={option.label}
             onPress={() => {

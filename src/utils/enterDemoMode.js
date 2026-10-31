@@ -1,6 +1,6 @@
-export function enterDemoMode(navigation) {
+export function enterDemoMode(navigation, accountType = 'customer') {
   navigation.reset({
     index: 0,
-    routes: [{ name: 'MainTabs' }],
+    routes: [{ name: 'MainTabs', params: { accountType } }],
   });
 }

@@ -23,7 +23,7 @@ export function LoginScreen({ navigation }) {
         return;
       }
 
-      enterDemoMode(navigation);
+      enterDemoMode(navigation, user.accountType);
       return;
     }
 
