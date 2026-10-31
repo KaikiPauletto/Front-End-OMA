@@ -7,11 +7,17 @@ import { formatCurrency } from '../utils/formatCurrency';
 
 export function ProductCard({ product, onPress, onAddToCart, layout = 'horizontal' }) {
   const isGrid = layout === 'grid';
+  const isCompact = layout === 'compact';
 
   return (
-    <View style={[styles.card, isGrid && styles.gridCard]}>
+    <View style={[styles.card, isGrid && styles.gridCard, isCompact && styles.compactCard]}>
       <Pressable onPress={onPress} style={styles.productArea}>
-        <View style={[styles.artwork, isGrid && styles.gridArtwork, { backgroundColor: product.backdrop || colors.surfaceMuted }]}>
+        <View style={[
+          styles.artwork,
+          isGrid && styles.gridArtwork,
+          isCompact && styles.compactArtwork,
+          { backgroundColor: product.backdrop || colors.surfaceMuted },
+        ]}>
           <ProductImage
             source={product.image}
             style={styles.image}
@@ -24,12 +30,16 @@ export function ProductCard({ product, onPress, onAddToCart, layout = 'horizonta
             </View>
           ) : null}
         </View>
-        <View style={[styles.details, isGrid && styles.gridDetails]}>
+        <View style={[styles.details, isGrid && styles.gridDetails, isCompact && styles.compactDetails]}>
           <Text numberOfLines={2} style={styles.name}>{product.name}</Text>
           <Text style={styles.price}>{formatCurrency(product.price)}</Text>
         </View>
       </Pressable>
-      <View style={[styles.buttonContainer, isGrid && styles.gridButtonContainer]}>
+      <View style={[
+        styles.buttonContainer,
+        isGrid && styles.gridButtonContainer,
+        isCompact && styles.compactButtonContainer,
+      ]}>
         <AppButton
           title="Adicionar"
           icon="bag-add-outline"
@@ -62,6 +72,10 @@ const styles = StyleSheet.create({
     minHeight: 0,
     flex: 1,
   },
+  compactCard: {
+    width: 168,
+    minHeight: 0,
+  },
   productArea: { flex: 1 },
   artwork: {
     height: 192,
@@ -71,6 +85,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   gridArtwork: { height: 154 },
+  compactArtwork: { height: 112 },
   image: { width: '100%', height: '100%' },
   badge: {
     position: 'absolute',
@@ -92,6 +107,7 @@ const styles = StyleSheet.create({
   },
   details: { paddingHorizontal: 16, paddingTop: 15, paddingBottom: 6 },
   gridDetails: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4 },
+  compactDetails: { paddingHorizontal: 11, paddingTop: 9, paddingBottom: 2 },
   name: {
     minHeight: 42,
     color: colors.ink,
@@ -109,6 +125,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: { paddingHorizontal: 16, paddingBottom: 12, paddingTop: 7 },
   gridButtonContainer: { paddingHorizontal: 10, paddingBottom: 10, paddingTop: 5 },
+  compactButtonContainer: { paddingHorizontal: 10, paddingBottom: 9, paddingTop: 4 },
   addButton: { width: '100%', borderRadius: 8, minHeight: 38 },
   addButtonText: { fontSize: 10, fontWeight: '500' },
 });

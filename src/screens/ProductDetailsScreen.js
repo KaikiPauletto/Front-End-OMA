@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -12,8 +12,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { QuantitySelector } from '../components/QuantitySelector';
 import { CartAddedBar } from '../components/CartAddedBar';
 import { ProductImage } from '../components/ProductImage';
+import { ProductCard } from '../components/ProductCard';
+import { SectionTitle } from '../components/SectionTitle';
 import { useCart } from '../contexts/CartContext';
-import { products } from '../data/products';
+import { getAvailableProducts, products } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -25,6 +27,25 @@ export function ProductDetailsScreen({ navigation, route }) {
   const [cartConfirmationVisible, setCartConfirmationVisible] = useState(Boolean(route.params?.justAdded));
   const { addItem, itemCount } = useCart();
   const insets = useSafeAreaInsets();
+  const availableProducts = useMemo(() => getAvailableProducts(), []);
+  const similarProducts = useMemo(
+    () => availableProducts
+      .filter((item) => item.id !== product?.id && item.category === product?.category)
+      .slice(0, 20),
+    [availableProducts, product?.category, product?.id],
+  );
+  const otherProducts = useMemo(
+    () => availableProducts
+      .filter((item) => item.category !== product?.category)
+      .slice(0, 20),
+    [availableProducts, product?.category],
+  );
+
+  useEffect(() => {
+    setVariant(product?.variants?.[0] ?? null);
+    setQuantity(1);
+    setCartConfirmationVisible(Boolean(route.params?.justAdded));
+  }, [product?.id, route.params?.justAdded]);
 
   if (!product) {
     return (
@@ -49,6 +70,19 @@ export function ProductDetailsScreen({ navigation, route }) {
     } else {
       Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
     }
+  }
+
+  function handleAddRecommendation(recommendedProduct) {
+    const result = addItem(recommendedProduct);
+    if (result?.ok) {
+      setCartConfirmationVisible(true);
+    } else {
+      Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
+    }
+  }
+
+  function openProduct(recommendedProduct) {
+    navigation.navigate('ProductDetails', { productId: recommendedProduct.id });
   }
 
   return (
@@ -121,6 +155,48 @@ export function ProductDetailsScreen({ navigation, route }) {
             </View>
           ) : null}
         </View>
+
+        {similarProducts.length > 0 ? (
+          <View style={styles.recommendationSection}>
+            <SectionTitle title="Produtos parecidos" />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recommendationList}
+            >
+              {similarProducts.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  product={item}
+                  layout="compact"
+                  onPress={() => openProduct(item)}
+                  onAddToCart={() => handleAddRecommendation(item)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {otherProducts.length > 0 ? (
+          <View style={styles.recommendationSection}>
+            <SectionTitle title="Você também pode gostar" />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recommendationList}
+            >
+              {otherProducts.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  product={item}
+                  layout="compact"
+                  onPress={() => openProduct(item)}
+                  onAddToCart={() => handleAddRecommendation(item)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
       </ScrollView>
 
       {!cartConfirmationVisible ? <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
@@ -191,6 +267,8 @@ const styles = StyleSheet.create({
   availabilityText: { color: colors.forestLight, fontSize: 12, fontWeight: '700' },
   typeDescription: { color: colors.muted, fontSize: 11, marginTop: 6 },
   quantityRow: { marginTop: 21, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  recommendationSection: { marginTop: 24, marginBottom: 8 },
+  recommendationList: { paddingHorizontal: 18, gap: 12, paddingBottom: 8 },
   bottomBar: {
     paddingHorizontal: 18,
     paddingTop: 13,
