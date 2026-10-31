@@ -41,8 +41,20 @@ export function CheckoutScreen({ navigation }) {
   });
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [formError, setFormError] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [shippingMessage, setShippingMessage] = useState('');
   const [purchaseComplete, setPurchaseComplete] = useState(false);
   const insets = useSafeAreaInsets();
+
+  function calculateShipping() {
+    const digits = postalCode.replace(/\D/g, '');
+    if (digits.length !== 8) {
+      setShippingMessage('Informe um CEP válido com 8 números.');
+      return;
+    }
+
+    setShippingMessage('CEP informado. O cálculo do frete estará disponível após a integração.');
+  }
 
   function finishPurchase() {
     const hasCompleteAddress = addressFields.every(({ key }) => address[key].trim());
@@ -157,6 +169,43 @@ export function CheckoutScreen({ navigation }) {
             <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
           </View>
         </View>
+
+        <Text style={styles.sectionTitle}>Calcular Frete</Text>
+        <View style={styles.shippingCalculator}>
+          <TextInput
+            accessibilityLabel="CEP"
+            autoComplete="postal-code"
+            keyboardType="number-pad"
+            maxLength={9}
+            onChangeText={(value) => {
+              const digits = value.replace(/\D/g, '').slice(0, 8);
+              setPostalCode(digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits);
+              setShippingMessage('');
+            }}
+            placeholder="Digite seu CEP"
+            placeholderTextColor={colors.muted}
+            style={styles.cepInput}
+            value={postalCode}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={calculateShipping}
+            style={styles.calculateButton}
+          >
+            <Text style={styles.calculateButtonText}>Calcular</Text>
+          </Pressable>
+        </View>
+        {shippingMessage ? (
+          <Text
+            accessibilityRole="status"
+            style={[
+              styles.shippingMessage,
+              postalCode.replace(/\D/g, '').length !== 8 && styles.shippingError,
+            ]}
+          >
+            {shippingMessage}
+          </Text>
+        ) : null}
 
         <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>Endereço de entrega</Text>
@@ -325,6 +374,34 @@ const styles = StyleSheet.create({
   summaryDivider: { height: 1, backgroundColor: colors.border, marginVertical: 9 },
   totalLabel: { color: colors.ink, fontSize: 12, fontWeight: '800' },
   totalValue: { color: colors.forest, fontSize: 14, fontWeight: '800' },
+  shippingCalculator: {
+    flexDirection: 'row',
+    gap: 9,
+    marginBottom: 8,
+  },
+  cepInput: {
+    flex: 1,
+    minHeight: 46,
+    paddingHorizontal: 13,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    color: colors.ink,
+    fontSize: 13,
+  },
+  calculateButton: {
+    minWidth: 96,
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 13,
+    backgroundColor: colors.forest,
+  },
+  calculateButtonText: { color: colors.white, fontSize: 12, fontWeight: '800' },
+  shippingMessage: { color: colors.forest, fontSize: 11, lineHeight: 16, marginBottom: 12 },
+  shippingError: { color: colors.danger },
   sectionHeading: { marginTop: 2 },
   addressButton: {
     minHeight: 49,
