@@ -6,6 +6,7 @@ import { DEMO_MODE } from '../config/appConfig';
 import { enterDemoMode } from '../utils/enterDemoMode';
 
 export function RegisterScreen({ navigation }) {
+  const [accountType, setAccountType] = useState('customer');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +36,37 @@ export function RegisterScreen({ navigation }) {
       <Text style={styles.brand}>oma<Text style={styles.brandDot}>.</Text></Text>
       <Text style={styles.title}>Faça parte da roda.</Text>
       <Text style={styles.subtitle}>Crie sua conta para acompanhar teus pedidos e endereços.</Text>
+
+      <Text style={styles.label}>Quero me cadastrar como</Text>
+      <View style={styles.accountTypeOptions}>
+        {[
+          { value: 'customer', label: 'Cliente' },
+          { value: 'seller', label: 'Vendedor' },
+        ].map((option) => {
+          const isSelected = accountType === option.value;
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: isSelected }}
+              onPress={() => setAccountType(option.value)}
+              style={[
+                styles.accountTypeOption,
+                isSelected && styles.accountTypeOptionSelected,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.accountTypeOptionText,
+                  isSelected && styles.accountTypeOptionTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <Text style={styles.label}>Nome</Text>
       <TextInput
@@ -94,6 +126,23 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 25, fontWeight: '800', textAlign: 'center', marginTop: 18 },
   subtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 24 },
   label: { color: colors.ink, fontSize: 12, fontWeight: '700', marginBottom: 7 },
+  accountTypeOptions: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  accountTypeOption: {
+    flex: 1,
+    height: 45,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountTypeOptionSelected: {
+    borderColor: colors.forest,
+    backgroundColor: colors.sage,
+  },
+  accountTypeOptionText: { color: colors.mutedStrong, fontSize: 13, fontWeight: '700' },
+  accountTypeOptionTextSelected: { color: colors.forest },
   input: {
     height: 49,
     borderRadius: 14,

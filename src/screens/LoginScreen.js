@@ -3,6 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { DEMO_MODE } from '../config/appConfig';
+import { authenticateMockUser } from '../services/mockAuth';
 import { enterDemoMode } from '../utils/enterDemoMode';
 
 export function LoginScreen({ navigation }) {
@@ -10,13 +11,19 @@ export function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
 
   function handleSubmit() {
-    if (DEMO_MODE) {
-      enterDemoMode(navigation);
+    if (!email.trim() || !password) {
+      Alert.alert('Dados incompletos', 'Informe seu e-mail e sua senha.');
       return;
     }
 
-    if (!email.trim() || !password) {
-      Alert.alert('Dados incompletos', 'Informe seu e-mail e sua senha.');
+    if (DEMO_MODE) {
+      const user = authenticateMockUser(email, password);
+      if (!user) {
+        Alert.alert('Acesso não autorizado', 'E-mail ou senha incorretos.');
+        return;
+      }
+
+      enterDemoMode(navigation);
       return;
     }
 
@@ -73,7 +80,7 @@ export function LoginScreen({ navigation }) {
       </Pressable>
       <Text style={styles.footnote}>
         {DEMO_MODE
-          ? 'Modo demonstração: entre sem preencher os campos. Nenhuma autenticação será realizada.'
+          ? 'Acessos de teste: usu@gmail.com / 123 (cliente) · adm@gmail.com / 123 (vendedor)'
           : 'A autenticação será habilitada quando a integração com o backend estiver disponível.'}
       </Text>
     </View>
