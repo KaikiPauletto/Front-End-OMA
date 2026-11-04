@@ -4,7 +4,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
-export function AppHeader({ navigation, onMenuPress, title = null, showBack = false, tone = 'default' }) {
+export function AppHeader({
+  navigation,
+  onMenuPress,
+  title = null,
+  showBack = false,
+  showMenu = true,
+  tone = 'default',
+}) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -26,15 +33,17 @@ export function AppHeader({ navigation, onMenuPress, title = null, showBack = fa
 
         {title ? <Text numberOfLines={1} style={[styles.title, tone === 'forest' && styles.forestText]}>{title}</Text> : null}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={showBack ? 'Fechar menu' : 'Abrir categorias'}
-          onPress={onMenuPress || (() => (showBack ? navigation?.goBack() : navigation?.navigate('Categorias')))}
-          hitSlop={10}
-          style={styles.sideButton}
-        >
-          <Ionicons name={showBack ? 'close-outline' : 'menu-outline'} size={23} color={tone === 'forest' ? colors.white : colors.ink} />
-        </Pressable>
+        {showMenu ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showBack ? 'Fechar menu' : 'Abrir categorias'}
+            onPress={onMenuPress || (() => (showBack ? navigation?.goBack() : navigation?.navigate('Categorias')))}
+            hitSlop={10}
+            style={styles.sideButton}
+          >
+            <Ionicons name={showBack ? 'close-outline' : 'menu-outline'} size={23} color={tone === 'forest' ? colors.white : colors.ink} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

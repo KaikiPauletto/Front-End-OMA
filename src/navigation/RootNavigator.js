@@ -82,6 +82,7 @@ function MainTabs() {
         tabBarIcon: ({ color, focused }) => {
           const icons = {
             Home: focused ? 'home' : 'home-outline',
+            Categorias: focused ? 'grid' : 'grid-outline',
             Carrinho: focused ? 'bag-handle' : 'bag-handle-outline',
             Conta: focused ? 'person' : 'person-outline',
           };
@@ -90,6 +91,13 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'HOME' }} />
+      <Tab.Screen
+        name="Categorias"
+        component={CategoriesScreen}
+        options={isCustomer
+          ? { tabBarLabel: 'CATEGORIAS' }
+          : { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
+      />
       {isCustomer ? (
         <Tab.Screen
           name="Carrinho"
@@ -105,11 +113,6 @@ function MainTabs() {
         name="Conta"
         component={AccountStack}
         options={{ tabBarLabel: 'CONTA' }}
-      />
-      <Tab.Screen
-        name="Categorias"
-        component={CategoriesScreen}
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
       />
       <Tab.Screen
         name="Subcategorias"

@@ -17,6 +17,7 @@ import { AppHeader } from '../components/AppHeader';
 import { EditorialSection } from '../components/EditorialSection';
 import { ProductCard } from '../components/ProductCard';
 import { SectionTitle } from '../components/SectionTitle';
+import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { categories, getCategoryById } from '../data/categories';
 import { getAvailableProducts } from '../data/products';
@@ -43,6 +44,7 @@ export function HomeScreen({ navigation }) {
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const heroHeight = Math.min(400, Math.max(300, (screenWidth - 40) * (400 / 350)));
+  const { user } = useAuth();
   const { addItem } = useCart();
 
   const availableProducts = useMemo(() => getAvailableProducts(), []);
@@ -90,7 +92,11 @@ export function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <AppHeader navigation={navigation} onMenuPress={() => navigation.navigate('Categorias')} />
+      <AppHeader
+        navigation={navigation}
+        onMenuPress={() => navigation.navigate('Categorias')}
+        showMenu={user?.role === 'ADMINISTRADOR'}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
