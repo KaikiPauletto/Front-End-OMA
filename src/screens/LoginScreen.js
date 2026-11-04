@@ -3,12 +3,12 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { DEMO_MODE } from '../config/appConfig';
-import { authenticateMockUser } from '../services/mockAuth';
-import { enterDemoMode } from '../utils/enterDemoMode';
+import { useAuth } from '../contexts/AuthContext';
 
 export function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const { signIn } = useAuth();
 
   function handleSubmit() {
     if (!email.trim() || !password) {
@@ -17,13 +17,13 @@ export function LoginScreen({ navigation }) {
     }
 
     if (DEMO_MODE) {
-      const user = authenticateMockUser(email, password);
-      if (!user) {
-        Alert.alert('Acesso não autorizado', 'E-mail ou senha incorretos.');
+      const result = signIn(email, password);
+      if (!result.ok) {
+        Alert.alert('Conta não encontrada', 'Informe o e-mail de uma das contas demonstrativas.');
         return;
       }
 
-      enterDemoMode(navigation, user.accountType);
+      setPassword('');
       return;
     }
 
@@ -75,12 +75,9 @@ export function LoginScreen({ navigation }) {
       >
         <Text style={styles.googleText}>Continuar com Google</Text>
       </Pressable>
-      <Pressable onPress={() => navigation.navigate('Register')} style={styles.registerLink}>
-        <Text style={styles.registerText}>Ainda não tem conta? <Text style={styles.registerAction}>Criar conta</Text></Text>
-      </Pressable>
       <Text style={styles.footnote}>
         {DEMO_MODE
-          ? 'Acessos de teste: usu@gmail.com / 123 (cliente) · adm@gmail.com / 123 (vendedor)'
+          ? 'Contas demonstrativas: usu@gmail.com (cliente) · adm@gmail.com (vendedor). Informe qualquer senha não vazia.'
           : 'A autenticação será habilitada quando a integração com o backend estiver disponível.'}
       </Text>
     </View>
@@ -135,8 +132,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   googleText: { color: colors.ink, fontSize: 13, fontWeight: '700' },
-  registerLink: { alignItems: 'center', marginTop: 19 },
-  registerText: { color: colors.muted, fontSize: 12 },
-  registerAction: { color: colors.forest, fontWeight: '800' },
-  footnote: { color: colors.muted, textAlign: 'center', fontSize: 10, lineHeight: 16, marginTop: 18 },
+  footnote: { color: colors.muted, textAlign: 'center', fontSize: 10, lineHeight: 16, marginTop: 22 },
 });

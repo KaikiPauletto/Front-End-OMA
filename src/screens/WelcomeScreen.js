@@ -32,14 +32,6 @@ export function WelcomeScreen({ navigation }) {
             <Text style={styles.primaryButtonText}>ENTRAR</Text>
           </Pressable>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => navigation.navigate('Register')}
-            style={styles.secondaryButton}
-          >
-            <Text style={styles.secondaryButtonText}>CRIAR CONTA</Text>
-          </Pressable>
-
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
             <Text style={styles.dividerText}>OU</Text>
@@ -117,21 +109,6 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: colors.white,
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  secondaryButton: {
-    height: 54,
-    borderRadius: 28,
-    borderWidth: 1.5,
-    borderColor: colors.clay,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-  },
-  secondaryButtonText: {
-    color: colors.clay,
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.4,

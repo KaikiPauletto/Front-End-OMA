@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { CartScreen } from '../screens/CartScreen';
 import { CategoriesScreen } from '../screens/CategoriesScreen';
@@ -12,7 +13,6 @@ import { OrdersScreen } from '../screens/OrdersScreen';
 import { ProductDetailsScreen } from '../screens/ProductDetailsScreen';
 import { ProductsScreen } from '../screens/ProductsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
-import { RegisterScreen } from '../screens/RegisterScreen';
 import { SellerProductsScreen } from '../screens/SellerProductsScreen';
 import { AddSellerProductScreen } from '../screens/AddSellerProductScreen';
 import { SubcategoriesScreen } from '../screens/SubcategoriesScreen';
@@ -23,8 +23,10 @@ import { typography } from '../theme/typography';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function AccountStack({ route }) {
-  const accountType = route.params?.accountType ?? 'customer';
+function AccountStack() {
+  const { user } = useAuth();
+  const isCustomer = user?.role === 'CLIENTE';
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
 
   return (
     <Stack.Navigator
@@ -34,22 +36,23 @@ function AccountStack({ route }) {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen
-        name="ContaHome"
-        component={ProfileScreen}
-        initialParams={{ accountType }}
-      />
-      <Stack.Screen name="Pedidos" component={OrdersScreen} />
-      <Stack.Screen name="MinhasVendas" component={SellerProductsScreen} />
-      <Stack.Screen name="AdicionarProduto" component={AddSellerProductScreen} />
+      <Stack.Screen name="ContaHome" component={ProfileScreen} />
+      {isCustomer ? <Stack.Screen name="Pedidos" component={OrdersScreen} /> : null}
+      {isAdministrator ? (
+        <>
+          <Stack.Screen name="MinhasVendas" component={SellerProductsScreen} />
+          <Stack.Screen name="AdicionarProduto" component={AddSellerProductScreen} />
+        </>
+      ) : null}
     </Stack.Navigator>
   );
 }
 
-function MainTabs({ route }) {
+function MainTabs() {
   const { itemCount } = useCart();
   const insets = useSafeAreaInsets();
-  const accountType = route.params?.accountType ?? 'customer';
+  const { user } = useAuth();
+  const isCustomer = user?.role === 'CLIENTE';
 
   return (
     <Tab.Navigator
@@ -87,19 +90,20 @@ function MainTabs({ route }) {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'HOME' }} />
-      <Tab.Screen
-        name="Carrinho"
-        component={CartScreen}
-        options={{
-          tabBarLabel: 'CARRINHO',
-          tabBarBadge: itemCount > 0 ? itemCount : undefined,
-          tabBarBadgeStyle: { backgroundColor: colors.clay, color: colors.white, fontSize: 9 },
-        }}
-      />
+      {isCustomer ? (
+        <Tab.Screen
+          name="Carrinho"
+          component={CartScreen}
+          options={{
+            tabBarLabel: 'CARRINHO',
+            tabBarBadge: itemCount > 0 ? itemCount : undefined,
+            tabBarBadgeStyle: { backgroundColor: colors.clay, color: colors.white, fontSize: 9 },
+          }}
+        />
+      ) : null}
       <Tab.Screen
         name="Conta"
         component={AccountStack}
-        initialParams={{ accountType }}
         options={{ tabBarLabel: 'CONTA' }}
       />
       <Tab.Screen
@@ -122,21 +126,31 @@ function MainTabs({ route }) {
 }
 
 export function RootNavigator() {
+  const { user } = useAuth();
+  const isCustomer = user?.role === 'CLIENTE';
+
   return (
     <Stack.Navigator
-      initialRouteName="Welcome"
+      key={user?.id ?? 'guest'}
+      initialRouteName={user ? 'MainTabs' : 'Welcome'}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: colors.canvas },
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="Welcome" component={WelcomeScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="MainTabs" component={MainTabs} />
-      <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
-      <Stack.Screen name="Checkout" component={CheckoutScreen} />
+      {user ? (
+        <>
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
+          {isCustomer ? <Stack.Screen name="Checkout" component={CheckoutScreen} /> : null}
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+        </>
+      )}
     </Stack.Navigator>
   );
 }

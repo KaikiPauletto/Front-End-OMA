@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext(null);
 
@@ -11,9 +12,16 @@ function getUnitPrice(product, variant) {
 }
 
 export function CartProvider({ children }) {
-  const [items, setItems] = useState([]);
+  const { user } = useAuth();
+  const [cartsByUserId, setCartsByUserId] = useState({});
+  const userId = user?.role === 'CLIENTE' ? user.id : null;
+  const items = userId ? cartsByUserId[userId] ?? [] : [];
 
   function addItem(product, variant = null, quantity = 1) {
+    if (!userId) {
+      return { ok: false, message: 'Entre como cliente para usar a sacola.' };
+    }
+
     if (!product || product.active === false) {
       return { ok: false, message: 'Este produto está indisponível no momento.' };
     }
@@ -41,31 +49,42 @@ export function CartProvider({ children }) {
       };
     }
 
-    setItems((currentItems) => {
+    setCartsByUserId((currentCarts) => {
+      const currentItems = currentCarts[userId] ?? [];
       const currentItem = currentItems.find((item) => item.key === key);
       if (currentItem) {
-        return currentItems.map((item) =>
-          item.key === key ? { ...item, quantity: requestedQuantity } : item,
-        );
+        return {
+          ...currentCarts,
+          [userId]: currentItems.map((item) =>
+            item.key === key ? { ...item, quantity: requestedQuantity } : item,
+          ),
+        };
       }
 
-      return [
-        ...currentItems,
-        {
-          key,
-          product,
-          variant,
-          quantity: requestedQuantity,
-          unitPrice: getUnitPrice(product, variant),
-          maximum,
-        },
-      ];
+      return {
+        ...currentCarts,
+        [userId]: [
+          ...currentItems,
+          {
+            key,
+            product,
+            variant,
+            quantity: requestedQuantity,
+            unitPrice: getUnitPrice(product, variant),
+            maximum,
+          },
+        ],
+      };
     });
 
     return { ok: true, message: 'Produto adicionado à sacola.' };
   }
 
   function updateQuantity(key, nextQuantity) {
+    if (!userId) {
+      return { ok: false, message: 'Entre como cliente para usar a sacola.' };
+    }
+
     const item = items.find((entry) => entry.key === key);
     if (!item) {
       return { ok: false, message: 'Este item não está mais na sacola.' };
@@ -79,20 +98,31 @@ export function CartProvider({ children }) {
       return { ok: false, message: 'Quantidade fora da disponibilidade deste item.' };
     }
 
-    setItems((currentItems) =>
-      currentItems.map((entry) =>
+    setCartsByUserId((currentCarts) => ({
+      ...currentCarts,
+      [userId]: (currentCarts[userId] ?? []).map((entry) =>
         entry.key === key ? { ...entry, quantity: nextQuantity } : entry,
       ),
-    );
+    }));
     return { ok: true };
   }
 
   function removeItem(key) {
-    setItems((currentItems) => currentItems.filter((item) => item.key !== key));
+    if (!userId) return;
+
+    setCartsByUserId((currentCarts) => ({
+      ...currentCarts,
+      [userId]: (currentCarts[userId] ?? []).filter((item) => item.key !== key),
+    }));
   }
 
   function clearCart() {
-    setItems([]);
+    if (!userId) return;
+
+    setCartsByUserId((currentCarts) => ({
+      ...currentCarts,
+      [userId]: [],
+    }));
   }
 
   const value = useMemo(
@@ -108,7 +138,7 @@ export function CartProvider({ children }) {
       removeItem,
       clearCart,
     }),
-    [items],
+    [items, userId],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

@@ -1,11 +1,14 @@
 const MOCK_USERS = [
-  { email: 'usu@gmail.com', password: '123', accountType: 'customer' },
-  { email: 'adm@gmail.com', password: '123', accountType: 'seller' },
+  { id: 'demo-customer', email: 'usu@gmail.com', role: 'CLIENTE' },
+  { id: 'demo-administrator', email: 'adm@gmail.com', role: 'ADMINISTRADOR' },
 ];
 
 export function authenticateMockUser(email, password) {
+  if (!password) {
+    return null;
+  }
+
   const normalizedEmail = email.trim().toLowerCase();
-  return MOCK_USERS.find(
-    (user) => user.email === normalizedEmail && user.password === password,
-  ) ?? null;
+  const user = MOCK_USERS.find((account) => account.email === normalizedEmail);
+  return user ? { ...user } : null;
 }

@@ -1,20 +1,20 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme/colors';
 
 const options = [
   { icon: 'receipt-outline', label: 'Meus pedidos', destination: 'Pedidos' },
-  { icon: 'location-outline', label: 'Endereços', destination: 'Login' },
+  { icon: 'location-outline', label: 'Endereços', destination: null },
   { icon: 'help-circle-outline', label: 'Ajuda e suporte', destination: null },
 ];
 
-export function ProfileScreen({ navigation, route }) {
-  const isSeller = route.params?.accountType === 'seller';
-  const profileOptions = isSeller
+export function ProfileScreen({ navigation }) {
+  const { user, signOut } = useAuth();
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
+  const profileOptions = isAdministrator
     ? [
-        options[0],
         { icon: 'pricetags-outline', label: 'Minhas vendas', destination: 'MinhasVendas' },
-        ...options.slice(1),
       ]
     : options;
 
@@ -26,20 +26,11 @@ export function ProfileScreen({ navigation, route }) {
           <Ionicons name="person-outline" size={26} color={colors.forest} />
         </View>
         <View style={styles.profileCopy}>
-          <Text style={styles.profileTitle}>
-            {isSeller ? 'Conta de vendedor' : 'Entre para continuar'}
-          </Text>
+          <Text style={styles.profileTitle}>{user?.email}</Text>
           <Text style={styles.profileDescription}>
-            {isSeller
-              ? 'Gerencie seus produtos e acompanhe suas vendas.'
-              : 'Acesse seus pedidos e dados de entrega.'}
+            {isAdministrator ? 'Vendedor' : 'Cliente'}
           </Text>
         </View>
-        {!isSeller ? (
-          <Pressable onPress={() => navigation.navigate('Login')} style={styles.loginButton}>
-            <Text style={styles.loginText}>Entrar</Text>
-          </Pressable>
-        ) : null}
       </View>
       <View style={styles.menu}>
         {profileOptions.map((option) => (
@@ -49,7 +40,7 @@ export function ProfileScreen({ navigation, route }) {
               if (option.destination) {
                 navigation.navigate(option.destination);
               } else {
-                Alert.alert('Em breve', 'As informações de suporte serão adicionadas.');
+                Alert.alert('Em breve', 'Esta opção será disponibilizada futuramente.');
               }
             }}
             style={styles.option}
@@ -60,6 +51,9 @@ export function ProfileScreen({ navigation, route }) {
           </Pressable>
         ))}
       </View>
+      <Pressable accessibilityRole="button" onPress={signOut} style={styles.logoutButton}>
+        <Text style={styles.logoutText}>Sair da conta</Text>
+      </Pressable>
       <Text style={styles.version}>OMA · Artigos gaúchos</Text>
     </View>
   );
@@ -89,8 +83,6 @@ const styles = StyleSheet.create({
   profileCopy: { flex: 1, marginHorizontal: 10 },
   profileTitle: { color: colors.ink, fontSize: 12, fontWeight: '800' },
   profileDescription: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
-  loginButton: { backgroundColor: colors.forest, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9 },
-  loginText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   menu: {
     marginTop: 19,
     paddingHorizontal: 15,
@@ -108,5 +100,15 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   optionText: { flex: 1, color: colors.ink, fontSize: 12, fontWeight: '600' },
+  logoutButton: {
+    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  logoutText: { color: colors.clay, fontSize: 12, fontWeight: '800' },
   version: { marginTop: 'auto', color: colors.muted, textAlign: 'center', fontSize: 10, paddingBottom: 5 },
 });

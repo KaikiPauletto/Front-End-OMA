@@ -12,7 +12,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProductImage } from '../components/ProductImage';
+import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useOrders } from '../contexts/OrdersContext';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
@@ -30,7 +32,9 @@ const paymentOptions = [
 ];
 
 export function CheckoutScreen({ navigation }) {
+  const { user } = useAuth();
   const { items, subtotal, clearCart } = useCart();
+  const { addOrder } = useOrders();
   const [addressVisible, setAddressVisible] = useState(false);
   const [address, setAddress] = useState({
     state: '',
@@ -57,10 +61,21 @@ export function CheckoutScreen({ navigation }) {
   }
 
   function finishPurchase() {
+    if (!user || user.role !== 'CLIENTE') {
+      setFormError('Somente clientes podem finalizar um pedido.');
+      return;
+    }
+
     const hasCompleteAddress = addressFields.every(({ key }) => address[key].trim());
     if (!addressVisible || !hasCompleteAddress) {
       setFormError('Preencha todos os campos do endereço para continuar.');
       setAddressVisible(true);
+      return;
+    }
+
+    const result = addOrder({ items, subtotal, address, postalCode });
+    if (!result.ok) {
+      setFormError('Não foi possível registrar o pedido demonstrativo.');
       return;
     }
 
@@ -75,10 +90,10 @@ export function CheckoutScreen({ navigation }) {
         <View style={styles.successIcon}>
           <Ionicons name="checkmark" size={38} color={colors.forest} />
         </View>
-        <Text style={styles.successTitle}>Compra de demonstração finalizada</Text>
+        <Text style={styles.successTitle}>Pedido demonstrativo registrado</Text>
         <Text style={styles.successDescription}>
-          Forma de pagamento: {paymentMethod === 'pix' ? 'Pix' : 'Boleto'}.
-          {'\n'}Nenhum pagamento foi processado.
+          Status: AGUARDANDO_PAGAMENTO.
+          {'\n'}Registro pendente: nenhum pagamento foi processado e nenhum frete ou baixa de estoque foi confirmado.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -133,6 +148,9 @@ export function CheckoutScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.sectionTitle}>Resumo do pedido</Text>
+        <Text style={styles.pendingNotice}>
+          Pedido demonstrativo: pagamento e frete ainda não foram confirmados.
+        </Text>
         {items.map((item) => (
           <View key={item.key} style={styles.productRow}>
             <View style={[styles.productArtwork, { backgroundColor: item.product.backdrop || colors.surfaceMuted }]}>
@@ -286,6 +304,9 @@ export function CheckoutScreen({ navigation }) {
         <Text style={styles.disclaimer}>
           Checkout demonstrativo: valores e disponibilidade ainda serão confirmados pelo sistema.
         </Text>
+        <Text style={styles.disclaimer}>
+          Ao finalizar, será criado um pedido pendente. Nenhum pagamento ou baixa de estoque será realizado.
+        </Text>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
@@ -328,6 +349,7 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 42 },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
   sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800', marginBottom: 12 },
+  pendingNotice: { color: colors.clay, fontSize: 11, lineHeight: 16, marginBottom: 14 },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
