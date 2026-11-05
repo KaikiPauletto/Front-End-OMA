@@ -1,3 +1,4 @@
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -15,6 +16,7 @@ import { ProductsScreen } from '../screens/ProductsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SellerProductsScreen } from '../screens/SellerProductsScreen';
 import { AddSellerProductScreen } from '../screens/AddSellerProductScreen';
+import { AnalyticsScreen } from '../screens/AnalyticsScreen';
 import { AboutOMAScreen } from '../screens/AboutOMAScreen';
 import { SubcategoriesScreen } from '../screens/SubcategoriesScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
@@ -27,7 +29,6 @@ const Tab = createBottomTabNavigator();
 function AccountStack() {
   const { user } = useAuth();
   const isCustomer = user?.role === 'CLIENTE';
-  const isAdministrator = user?.role === 'ADMINISTRADOR';
 
   return (
     <Stack.Navigator
@@ -39,12 +40,6 @@ function AccountStack() {
     >
       <Stack.Screen name="ContaHome" component={ProfileScreen} />
       {isCustomer ? <Stack.Screen name="Pedidos" component={OrdersScreen} /> : null}
-      {isAdministrator ? (
-        <>
-          <Stack.Screen name="MinhasVendas" component={SellerProductsScreen} />
-          <Stack.Screen name="AdicionarProduto" component={AddSellerProductScreen} />
-        </>
-      ) : null}
     </Stack.Navigator>
   );
 }
@@ -54,6 +49,7 @@ function MainTabs() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const isCustomer = user?.role === 'CLIENTE';
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
 
   return (
     <Tab.Navigator
@@ -85,6 +81,8 @@ function MainTabs() {
             Home: focused ? 'home' : 'home-outline',
             Categorias: focused ? 'grid' : 'grid-outline',
             Carrinho: focused ? 'bag-handle' : 'bag-handle-outline',
+            Vendas: focused ? 'pricetags' : 'pricetags-outline',
+            Analytics: focused ? 'bar-chart' : 'bar-chart-outline',
             Conta: focused ? 'person' : 'person-outline',
           };
           return <Ionicons name={icons[route.name] || 'grid-outline'} size={18} color={color} />;
@@ -92,13 +90,42 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'HOME' }} />
-      <Tab.Screen
-        name="Categorias"
-        component={CategoriesScreen}
-        options={isCustomer
-          ? { tabBarLabel: 'CATEGORIAS' }
-          : { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
-      />
+      {isAdministrator ? (
+        <Tab.Screen name="Vendas" component={SellerProductsScreen} options={{ tabBarLabel: 'VENDAS' }} />
+      ) : (
+        <Tab.Screen
+          name="Categorias"
+          component={CategoriesScreen}
+          options={isCustomer
+            ? { tabBarLabel: 'CATEGORIAS' }
+            : { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
+        />
+      )}
+      {isAdministrator ? (
+        <Tab.Screen
+          name="AdicionarProduto"
+          component={AddSellerProductScreen}
+          options={{
+            tabBarLabel: '',
+            tabBarButton: ({ onPress, accessibilityState, style }) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Adicionar produto"
+                accessibilityState={accessibilityState}
+                onPress={onPress}
+                style={[style, styles.addTabButton]}
+              >
+                <View style={styles.addTabCircle}>
+                  <Ionicons name="add" size={27} color={colors.white} />
+                </View>
+              </Pressable>
+            ),
+          }}
+        />
+      ) : null}
+      {isAdministrator ? (
+        <Tab.Screen name="Analytics" component={AnalyticsScreen} options={{ tabBarLabel: 'ANALYTICS' }} />
+      ) : null}
       {isCustomer ? (
         <Tab.Screen
           name="Carrinho"
@@ -118,6 +145,25 @@ function MainTabs() {
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  addTabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTabCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.forest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -17,
+    borderWidth: 3,
+    borderColor: colors.canvas,
+  },
+});
 
 export function RootNavigator() {
   const { user } = useAuth();

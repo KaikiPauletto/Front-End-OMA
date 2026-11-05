@@ -28,8 +28,6 @@ export function SellerProductsScreen({ navigation }) {
     <View style={styles.screen}>
       <AppHeader
         navigation={navigation}
-        onBackPress={() => navigation.goBack()}
-        showBack
         showMenu={false}
         title="Minhas vendas"
       />
@@ -86,16 +84,6 @@ export function SellerProductsScreen({ navigation }) {
         })}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => navigation.navigate('AdicionarProduto')}
-          style={styles.addButton}
-        >
-          <Ionicons name="add" size={20} color={colors.white} />
-          <Text style={styles.addButtonText}>Adicionar Produto</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -138,22 +126,4 @@ const styles = StyleSheet.create({
   productName: { color: colors.ink, fontSize: 13, fontWeight: '800', lineHeight: 18 },
   category: { color: colors.muted, fontSize: 11, marginTop: 3 },
   quantity: { color: colors.mutedStrong, fontSize: 10, marginTop: 4 },
-  footer: {
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.canvas,
-  },
-  addButton: {
-    minHeight: 52,
-    borderRadius: 16,
-    backgroundColor: colors.forest,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  addButtonText: { color: colors.white, fontSize: 14, fontWeight: '800' },
 });

@@ -81,7 +81,7 @@ export function AddSellerProductScreen({ navigation }) {
       description: description.trim(),
       image,
     });
-    navigation.goBack();
+    navigation.navigate('Vendas');
   }
 
   const selectedCategory = categories.find((item) => item.id === category);
@@ -95,7 +95,7 @@ export function AddSellerProductScreen({ navigation }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Voltar"
-          onPress={() => navigation.goBack()}
+          onPress={() => navigation.navigate('Vendas')}
           style={styles.back}
         >
           <Ionicons name="arrow-back" size={21} color={colors.forest} />

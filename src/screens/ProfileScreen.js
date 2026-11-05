@@ -13,9 +13,7 @@ export function ProfileScreen({ navigation }) {
   const { user, signOut } = useAuth();
   const isAdministrator = user?.role === 'ADMINISTRADOR';
   const profileOptions = isAdministrator
-    ? [
-        { icon: 'pricetags-outline', label: 'Minhas vendas', destination: 'MinhasVendas' },
-      ]
+    ? []
     : options;
 
   return (
@@ -32,29 +30,31 @@ export function ProfileScreen({ navigation }) {
           </Text>
         </View>
       </View>
-      <View style={styles.menu}>
-        {profileOptions.map((option) => (
-          <Pressable
-            key={option.label}
-            onPress={() => {
-              if (option.destination) {
-                navigation.navigate(option.destination);
-              } else {
-                Alert.alert('Em breve', 'Esta opção será disponibilizada futuramente.');
-              }
-            }}
-            style={styles.option}
-          >
-            <Ionicons name={option.icon} size={20} color={colors.forest} />
-            <Text style={styles.optionText}>{option.label}</Text>
-            <Ionicons name="chevron-forward" size={17} color={colors.muted} />
-          </Pressable>
-        ))}
-      </View>
+      {profileOptions.length > 0 ? (
+        <View style={styles.menu}>
+          {profileOptions.map((option) => (
+            <Pressable
+              key={option.label}
+              onPress={() => {
+                if (option.destination) {
+                  navigation.navigate(option.destination);
+                } else {
+                  Alert.alert('Em breve', 'Esta opção será disponibilizada futuramente.');
+                }
+              }}
+              style={styles.option}
+            >
+              <Ionicons name={option.icon} size={20} color={colors.forest} />
+              <Text style={styles.optionText}>{option.label}</Text>
+              <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       <Pressable accessibilityRole="button" onPress={signOut} style={styles.logoutButton}>
         <Text style={styles.logoutText}>Sair da conta</Text>
       </Pressable>
-      <Text style={styles.version}>OMA · Artigos gaúchos</Text>
+      {!isAdministrator ? <Text style={styles.version}>OMA · Artigos gaúchos</Text> : null}
     </View>
   );
 }
