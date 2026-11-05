@@ -12,7 +12,7 @@ export function OrdersScreen({ navigation }) {
     <View style={styles.screen}>
       <AppHeader
         navigation={navigation}
-        onBackPress={() => navigation.getParent()?.navigate('Home')}
+        onBackPress={() => navigation.goBack()}
         showBack
         showMenu={false}
         title="Meus pedidos"

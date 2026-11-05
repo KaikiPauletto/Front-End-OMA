@@ -44,6 +44,8 @@ export function AppHeader({
           >
             <Ionicons name={showBack ? 'close-outline' : 'menu-outline'} size={23} color={tone === 'forest' ? colors.white : colors.ink} />
           </Pressable>
+        ) : showBack ? (
+          <View style={styles.sideButton} />
         ) : null}
       </View>
     </View>
