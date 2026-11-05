@@ -1,8 +1,8 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
-export function EditorialSection() {
+export function EditorialSection({ onLearnMore }) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Nossas Raízes</Text>
@@ -16,9 +16,13 @@ export function EditorialSection() {
           resizeMode="cover"
         />
       </View>
-      <View style={styles.button}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onLearnMore}
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+      >
         <Text style={styles.buttonText}>Conheça a OMA</Text>
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -72,6 +76,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  buttonPressed: { opacity: 0.8 },
   buttonText: {
     color: colors.white,
     fontFamily: typography.family.body,

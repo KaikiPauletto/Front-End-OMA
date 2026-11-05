@@ -11,7 +11,13 @@ export function CategoriesScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <AppHeader navigation={navigation} title="Categorias" showBack tone="forest" />
+      <AppHeader
+        navigation={navigation}
+        title="Categorias"
+        showBack
+        showMenu={false}
+        tone="forest"
+      />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>EXPLORAR</Text>

@@ -15,7 +15,7 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 
 - `App.js`: inicialização do Expo e provedores globais.
 - `src/navigation`: navegação por abas e telas empilhadas com React Navigation.
-- `src/screens`: boas-vindas, login, cadastro, início, categorias, subcategorias, catálogo de produtos, detalhes, sacola, checkout, pedidos e perfil.
+- `src/screens`: boas-vindas, login, cadastro, início, categorias, subcategorias, catálogo de produtos, detalhes, página institucional da OMA, sacola, checkout, pedidos e perfil.
 - `src/components`: componentes reutilizáveis de produto, quantidade e estados vazios.
 - `src/contexts/CartContext.js`: estado compartilhado da sacola.
 - `src/data/products.js`: catálogo local de demonstração; substituir pelos dados retornados pela API.
@@ -51,6 +51,7 @@ Esse comportamento existe somente para testar as telas e a navegação. Ele **n�
 - `src/components/SectionTitle.js` padroniza títulos e ações de seção.
 - `src/components/ProductCard.js` segue a proporção visual do card do Figma e continua respeitando o tipo e o estoque por meio do `CartContext`.
 - `src/components/EditorialSection.js` encapsula a seção institucional “Nossas Raízes”.
+- O botão “Conheça a OMA” abre `src/screens/AboutOMAScreen.js`, com a história do projeto e seus quatro criadores.
 - A navegação inferior possui `Home`, `Carrinho` e `Conta`. A tela `Pedidos` está aninhada na área `Conta`.
 - O menu no cabeçalho da Home abre `Categorias`; uma categoria abre `Subcategorias`; selecionar uma subcategoria abre `Produtos`.
 - A pesquisa da Home abre `Produtos` com o termo informado. `Ver todos` em `Mais Vendidos` abre o catálogo ordenado pela classificação demonstrativa de vendas.

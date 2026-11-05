@@ -174,7 +174,7 @@ export function HomeScreen({ navigation }) {
           </ScrollView>
         </View>
 
-        <EditorialSection />
+        <EditorialSection onLearnMore={() => navigation.navigate('AboutOMA')} />
 
         <View style={styles.catalogSection}>
           <SectionTitle title="Todos os produtos" />

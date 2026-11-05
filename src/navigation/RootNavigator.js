@@ -15,6 +15,7 @@ import { ProductsScreen } from '../screens/ProductsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SellerProductsScreen } from '../screens/SellerProductsScreen';
 import { AddSellerProductScreen } from '../screens/AddSellerProductScreen';
+import { AboutOMAScreen } from '../screens/AboutOMAScreen';
 import { SubcategoriesScreen } from '../screens/SubcategoriesScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { colors } from '../theme/colors';
@@ -135,6 +136,7 @@ export function RootNavigator() {
       {user ? (
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen name="AboutOMA" component={AboutOMAScreen} />
           <Stack.Screen name="Subcategorias" component={SubcategoriesScreen} />
           <Stack.Screen name="Produtos" component={ProductsScreen} />
           <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
