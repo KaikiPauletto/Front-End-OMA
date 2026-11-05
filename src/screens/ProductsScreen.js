@@ -15,17 +15,14 @@ import { AppHeader } from '../components/AppHeader';
 import { ProductCard } from '../components/ProductCard';
 import { CartAddedBar } from '../components/CartAddedBar';
 import { categories, getCategoryById, getSubcategoryById } from '../data/categories';
-import { getAvailableProducts } from '../data/products';
+import {
+  getAvailableProducts,
+  productSortOptions,
+  sortProducts,
+} from '../data/products';
 import { useCart } from '../contexts/CartContext';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
-
-const sortOptions = [
-  { id: 'bestsellers', label: 'Mais vendidos' },
-  { id: 'price-asc', label: 'Menor preço' },
-  { id: 'price-desc', label: 'Maior preço' },
-  { id: 'name-asc', label: 'A - Z' },
-];
 
 export function ProductsScreen({ navigation, route }) {
   const initialParams = route.params ?? {};
@@ -58,12 +55,7 @@ export function ProductsScreen({ navigation, route }) {
       return matchesCategory && matchesSubcategory && matchesSearch;
     });
 
-    result = result.slice();
-    if (sortBy === 'price-asc') result.sort((a, b) => a.price - b.price);
-    else if (sortBy === 'price-desc') result.sort((a, b) => b.price - a.price);
-    else if (sortBy === 'name-asc') result.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-    else result.sort((a, b) => (a.salesRank ?? 999) - (b.salesRank ?? 999));
-    return result;
+    return sortProducts(result, sortBy);
   }, [availableProducts, categoryId, subcategoryId, search, sortBy]);
 
   const title = search.trim()
@@ -204,7 +196,7 @@ export function ProductsScreen({ navigation, route }) {
           <Pressable style={styles.sortSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Ordenar por</Text>
-            {sortOptions.map((option) => (
+            {productSortOptions.map((option) => (
               <Pressable key={option.id} style={styles.optionRow} onPress={() => { setSortBy(option.id); setSortVisible(false); }}>
                 <Text style={styles.optionText}>{option.label}</Text>
                 {sortBy === option.id ? <Ionicons name="checkmark-circle" size={19} color={colors.forest} /> : null}

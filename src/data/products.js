@@ -190,6 +190,38 @@ export const categoriesLegacy = [
   { id: 'erva-mate', label: 'Erva-mate', icon: 'nutrition-outline' },
 ];
 
+export const productSortOptions = [
+  { id: 'bestsellers', label: 'Mais vendidos' },
+  { id: 'price-asc', label: 'Menor preço' },
+  { id: 'price-desc', label: 'Maior preço' },
+  { id: 'name-asc', label: 'A - Z' },
+];
+
+const sortComparators = {
+  bestsellers: (first, second) => (first.salesRank ?? 999) - (second.salesRank ?? 999),
+  'price-asc': (first, second) => first.price - second.price,
+  'price-desc': (first, second) => second.price - first.price,
+  'name-asc': (first, second) => first.name.localeCompare(second.name, 'pt-BR'),
+};
+
+export function sortProducts(productList, sortBy) {
+  const compareProducts = sortComparators[sortBy] ?? sortComparators.bestsellers;
+  return productList.slice().sort(compareProducts);
+}
+
+export function getProductStock(product, variant) {
+  return variant?.stock ?? product.stock;
+}
+
+export function getProductPrice(product, variant) {
+  return variant?.price ?? product.price;
+}
+
+export function getMaximumPurchase(product, variant) {
+  const stock = getProductStock(product, variant);
+  return Math.min(stock, product.maxPurchase ?? stock);
+}
+
 export function getAvailableProducts() {
   return products.filter((product) => (
     product.active !== false &&
@@ -200,7 +232,5 @@ export function getAvailableProducts() {
 }
 
 export function getBestSellingProducts() {
-  return getAvailableProducts().slice().sort(
-    (first, second) => (first.salesRank ?? 999) - (second.salesRank ?? 999),
-  );
+  return sortProducts(getAvailableProducts(), 'bestsellers');
 }

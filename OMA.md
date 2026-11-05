@@ -11,6 +11,12 @@
 >
 > **Importante:** este documento organiza as regras de negócio do PDF e complementa-as com as decisões técnicas fornecidas pela equipe. Ele não define endpoints, contratos de API, bibliotecas adicionais ou detalhes que ainda não foram especificados.
 
+> **Regras no desenvolvimento:**
+> Manter sempre boas nomenclaturas, objetivas e entendíveis
+> Funções pequenas quando possível e com um propósito
+> Usar os princípios DRY, KISS e YAGNI
+> Utilizar os princípios SOLID 
+
 ## 1. Contexto geral
 
 O OMA é um sistema de comércio eletrônico com catálogo de produtos,

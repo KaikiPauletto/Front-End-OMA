@@ -15,7 +15,13 @@ import { ProductImage } from '../components/ProductImage';
 import { ProductCard } from '../components/ProductCard';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCart } from '../contexts/CartContext';
-import { getAvailableProducts, products } from '../data/products';
+import {
+  getAvailableProducts,
+  getMaximumPurchase,
+  getProductPrice,
+  getProductStock,
+  products,
+} from '../data/products';
 import { getCategoryLabel } from '../data/categories';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -58,9 +64,9 @@ export function ProductDetailsScreen({ navigation, route }) {
     );
   }
 
-  const stock = variant?.stock ?? product.stock;
-  const unitPrice = variant?.price ?? product.price;
-  const maximum = Math.min(stock, product.maxPurchase ?? stock);
+  const stock = getProductStock(product, variant);
+  const unitPrice = getProductPrice(product, variant);
+  const maximum = getMaximumPurchase(product, variant);
 
   function handleAdd() {
     const result = addItem(product, variant, quantity);

@@ -1,15 +1,12 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
+import {
+  getMaximumPurchase,
+  getProductPrice,
+  getProductStock,
+} from '../data/products';
 
 const CartContext = createContext(null);
-
-function getAvailability(product, variant) {
-  return variant?.stock ?? product.stock;
-}
-
-function getUnitPrice(product, variant) {
-  return variant?.price ?? product.price;
-}
 
 export function CartProvider({ children }) {
   const { user } = useAuth();
@@ -30,14 +27,14 @@ export function CartProvider({ children }) {
       return { ok: false, message: 'Informe uma quantidade válida.' };
     }
 
-    const stock = getAvailability(product, variant);
+    const stock = getProductStock(product, variant);
     if (stock <= 0) {
       return { ok: false, message: 'Esta opção está indisponível no momento.' };
     }
 
     const key = `${product.id}:${variant?.id ?? 'default'}`;
     const existing = items.find((item) => item.key === key);
-    const maximum = Math.min(stock, product.maxPurchase ?? stock);
+    const maximum = getMaximumPurchase(product, variant);
     const requestedQuantity = product.type === 'UNITÁRIO'
       ? 1
       : (existing?.quantity ?? 0) + quantity;
@@ -70,7 +67,7 @@ export function CartProvider({ children }) {
             product,
             variant,
             quantity: requestedQuantity,
-            unitPrice: getUnitPrice(product, variant),
+            unitPrice: getProductPrice(product, variant),
             maximum,
           },
         ],
@@ -94,7 +91,11 @@ export function CartProvider({ children }) {
       return { ok: false, message: 'Peças unitárias ficam limitadas a uma unidade.' };
     }
 
-    if (nextQuantity < 1 || nextQuantity > item.maximum) {
+    if (
+      !Number.isInteger(nextQuantity) ||
+      nextQuantity < 1 ||
+      nextQuantity > item.maximum
+    ) {
       return { ok: false, message: 'Quantidade fora da disponibilidade deste item.' };
     }
 

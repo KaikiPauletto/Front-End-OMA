@@ -20,7 +20,11 @@ import { SectionTitle } from '../components/SectionTitle';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { categories, getCategoryById } from '../data/categories';
-import { getAvailableProducts } from '../data/products';
+import {
+  getAvailableProducts,
+  productSortOptions,
+  sortProducts,
+} from '../data/products';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
@@ -28,12 +32,6 @@ const heroImage = { uri: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/
 
 const brandPlaceholders = ['Marca 1', 'Marca 2', 'Marca 3', 'Marca 4', 'Marca 5'];
 const PRODUCTS_PER_PAGE = 30;
-const sortOptions = [
-  { id: 'bestsellers', label: 'Mais vendidos' },
-  { id: 'price-asc', label: 'Menor preço' },
-  { id: 'price-desc', label: 'Maior preço' },
-  { id: 'name-asc', label: 'A - Z' },
-];
 
 export function HomeScreen({ navigation }) {
   const [search, setSearch] = useState('');
@@ -49,20 +47,16 @@ export function HomeScreen({ navigation }) {
 
   const availableProducts = useMemo(() => getAvailableProducts(), []);
   const featuredProducts = useMemo(
-    () => availableProducts.slice().sort((a, b) => (a.salesRank ?? 999) - (b.salesRank ?? 999)).slice(0, 5),
+    () => sortProducts(availableProducts, 'bestsellers').slice(0, 5),
     [availableProducts],
   );
   const selectedCategory = getCategoryById(categoryId);
   const filteredProducts = useMemo(() => {
-    const result = availableProducts.filter(
+    const categoryProducts = availableProducts.filter(
       (product) => !categoryId || product.category === categoryId,
     );
 
-    if (sortBy === 'price-asc') result.sort((first, second) => first.price - second.price);
-    else if (sortBy === 'price-desc') result.sort((first, second) => second.price - first.price);
-    else if (sortBy === 'name-asc') result.sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'));
-    else result.sort((first, second) => (first.salesRank ?? 999) - (second.salesRank ?? 999));
-    return result;
+    return sortProducts(categoryProducts, sortBy);
   }, [availableProducts, categoryId, sortBy]);
   const pageCount = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
   const pageProducts = filteredProducts.slice(
@@ -203,7 +197,7 @@ export function HomeScreen({ navigation }) {
             >
               <Ionicons name="swap-vertical-outline" size={16} color={colors.ink} />
               <Text numberOfLines={1} style={styles.catalogActionText}>
-                {sortOptions.find((option) => option.id === sortBy).label}
+                {productSortOptions.find((option) => option.id === sortBy).label}
               </Text>
               <Ionicons name="chevron-down" size={15} color={colors.muted} />
             </Pressable>
@@ -302,7 +296,7 @@ export function HomeScreen({ navigation }) {
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Ordenar produtos</Text>
-            {sortOptions.map((option) => (
+            {productSortOptions.map((option) => (
               <Pressable
                 key={option.id}
                 onPress={() => {
