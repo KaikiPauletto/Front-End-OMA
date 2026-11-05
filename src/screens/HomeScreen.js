@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   ImageBackground,
   Modal,
   Pressable,
@@ -30,7 +31,13 @@ import { typography } from '../theme/typography';
 
 const heroImage = { uri: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/Chimarr%C3%A3o_do_Ga%C3%BAcho.jpg/1280px-Chimarr%C3%A3o_do_Ga%C3%BAcho.jpg' };
 
-const brandPlaceholders = ['Marca 1', 'Marca 2', 'Marca 3', 'Marca 4', 'Marca 5'];
+const brands = [
+  { name: 'Stanley', image: require('../assets/brands/stanley.png') },
+  { name: 'Barão', image: require('../assets/brands/barao.png') },
+  { name: 'Termolar', image: require('../assets/brands/termolar.jpg') },
+  { name: 'Mor', image: require('../assets/brands/mor.jpg') },
+  { name: 'MateNativo', image: require('../assets/brands/matenativo.webp') },
+];
 const PRODUCTS_PER_PAGE = 30;
 
 export function HomeScreen({ navigation }) {
@@ -166,9 +173,14 @@ export function HomeScreen({ navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.brandList}
           >
-            {brandPlaceholders.map((brand) => (
-              <View key={brand} style={styles.brandPlaceholder}>
-                <Ionicons name="image-outline" size={22} color="#A6A9A5" />
+            {brands.map((brand) => (
+              <View key={brand.name} style={styles.brandCard}>
+                <Image
+                  accessibilityLabel={brand.name}
+                  resizeMode="contain"
+                  source={brand.image}
+                  style={styles.brandImage}
+                />
               </View>
             ))}
           </ScrollView>
@@ -397,17 +409,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   brandsSection: { marginTop: 38 },
-  brandList: { paddingHorizontal: 8, gap: 13 },
-  brandPlaceholder: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+  brandList: { paddingHorizontal: 8, gap: 12 },
+  brandCard: {
+    width: 116,
+    height: 78,
+    padding: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#AFB1B6',
-    backgroundColor: '#EFEFF0',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  brandImage: { width: '100%', height: '100%' },
   catalogSection: { marginTop: 38 },
   catalogCount: {
     color: colors.muted,

@@ -113,7 +113,7 @@ function MainTabs() {
       <Tab.Screen
         name="Conta"
         component={AccountStack}
-        options={{ tabBarLabel: 'CONTA' }}
+        options={{ tabBarLabel: 'CONTA', popToTopOnBlur: true }}
       />
     </Tab.Navigator>
   );
