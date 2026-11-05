@@ -28,8 +28,10 @@ export function SellerProductsScreen({ navigation }) {
     <View style={styles.screen}>
       <AppHeader
         navigation={navigation}
+        onBackPress={() => navigation.navigate('Home')}
+        showBack
         showMenu={false}
-        title="Minhas vendas"
+        title="Minhas Vendas"
       />
       <Text style={styles.subtitle}>Acompanhe os produtos cadastrados na sua loja.</Text>
 

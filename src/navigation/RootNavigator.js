@@ -159,7 +159,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -17,
     borderWidth: 3,
     borderColor: colors.canvas,
   },

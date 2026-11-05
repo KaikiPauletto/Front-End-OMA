@@ -1,5 +1,6 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AppHeader } from '../components/AppHeader';
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -18,50 +19,58 @@ export function ProfileScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Minha conta</Text>
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Ionicons name="person-outline" size={26} color={colors.forest} />
+      <AppHeader
+        navigation={navigation}
+        onBackPress={() => navigation.navigate('Home')}
+        showBack
+        showMenu={false}
+        title="Minha Conta"
+      />
+      <View style={styles.content}>
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <Ionicons name="person-outline" size={26} color={colors.forest} />
+          </View>
+          <View style={styles.profileCopy}>
+            <Text style={styles.profileTitle}>{user?.email}</Text>
+            <Text style={styles.profileDescription}>
+              {isAdministrator ? 'Vendedor' : 'Cliente'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.profileCopy}>
-          <Text style={styles.profileTitle}>{user?.email}</Text>
-          <Text style={styles.profileDescription}>
-            {isAdministrator ? 'Vendedor' : 'Cliente'}
-          </Text>
-        </View>
+        {profileOptions.length > 0 ? (
+          <View style={styles.menu}>
+            {profileOptions.map((option) => (
+              <Pressable
+                key={option.label}
+                onPress={() => {
+                  if (option.destination) {
+                    navigation.navigate(option.destination);
+                  } else {
+                    Alert.alert('Em breve', 'Esta opção será disponibilizada futuramente.');
+                  }
+                }}
+                style={styles.option}
+              >
+                <Ionicons name={option.icon} size={20} color={colors.forest} />
+                <Text style={styles.optionText}>{option.label}</Text>
+                <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        <Pressable accessibilityRole="button" onPress={signOut} style={styles.logoutButton}>
+          <Text style={styles.logoutText}>Sair da conta</Text>
+        </Pressable>
+        {!isAdministrator ? <Text style={styles.version}>OMA · Artigos gaúchos</Text> : null}
       </View>
-      {profileOptions.length > 0 ? (
-        <View style={styles.menu}>
-          {profileOptions.map((option) => (
-            <Pressable
-              key={option.label}
-              onPress={() => {
-                if (option.destination) {
-                  navigation.navigate(option.destination);
-                } else {
-                  Alert.alert('Em breve', 'Esta opção será disponibilizada futuramente.');
-                }
-              }}
-              style={styles.option}
-            >
-              <Ionicons name={option.icon} size={20} color={colors.forest} />
-              <Text style={styles.optionText}>{option.label}</Text>
-              <Ionicons name="chevron-forward" size={17} color={colors.muted} />
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-      <Pressable accessibilityRole="button" onPress={signOut} style={styles.logoutButton}>
-        <Text style={styles.logoutText}>Sair da conta</Text>
-      </Pressable>
-      {!isAdministrator ? <Text style={styles.version}>OMA · Artigos gaúchos</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.canvas, padding: 22, paddingTop: 20 },
-  title: { color: colors.ink, fontSize: 26, fontWeight: '800' },
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  content: { flex: 1, padding: 22 },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',

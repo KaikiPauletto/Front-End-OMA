@@ -6,7 +6,13 @@ import { colors } from '../theme/colors';
 export function AnalyticsScreen({ navigation }) {
   return (
     <View style={styles.screen}>
-      <AppHeader navigation={navigation} showMenu={false} title="Analytics" />
+      <AppHeader
+        navigation={navigation}
+        onBackPress={() => navigation.navigate('Home')}
+        showBack
+        showMenu={false}
+        title="Analytics"
+      />
       <View style={styles.content}>
         <View style={styles.icon}>
           <Ionicons name="bar-chart-outline" size={30} color={colors.forest} />
