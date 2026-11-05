@@ -144,7 +144,10 @@ export function ProductsScreen({ navigation, route }) {
         visible={cartConfirmationVisible}
         itemCount={itemCount}
         onClose={() => setCartConfirmationVisible(false)}
-        onContinue={() => { setCartConfirmationVisible(false); navigation.navigate('Carrinho'); }}
+        onContinue={() => {
+          setCartConfirmationVisible(false);
+          navigation.navigate('MainTabs', { screen: 'Carrinho' });
+        }}
         bottomOffset={70}
       />
 

@@ -114,16 +114,6 @@ function MainTabs() {
         component={AccountStack}
         options={{ tabBarLabel: 'CONTA' }}
       />
-      <Tab.Screen
-        name="Subcategorias"
-        component={SubcategoriesScreen}
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
-      />
-      <Tab.Screen
-        name="Produtos"
-        component={ProductsScreen}
-        options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }}
-      />
     </Tab.Navigator>
   );
 }
@@ -145,6 +135,8 @@ export function RootNavigator() {
       {user ? (
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen name="Subcategorias" component={SubcategoriesScreen} />
+          <Stack.Screen name="Produtos" component={ProductsScreen} />
           <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
           {isCustomer ? <Stack.Screen name="Checkout" component={CheckoutScreen} /> : null}
         </>
