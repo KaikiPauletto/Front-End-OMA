@@ -95,7 +95,7 @@ export function AddSellerProductScreen({ navigation }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Voltar"
-          onPress={() => navigation.navigate('Vendas')}
+          onPress={() => navigation.navigate('Home')}
           style={styles.back}
         >
           <Ionicons name="arrow-back" size={21} color={colors.forest} />
