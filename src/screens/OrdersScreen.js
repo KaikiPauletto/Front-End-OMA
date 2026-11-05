@@ -1,15 +1,22 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppHeader } from '../components/AppHeader';
 import { EmptyState } from '../components/EmptyState';
 import { useOrders } from '../contexts/OrdersContext';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
-export function OrdersScreen() {
+export function OrdersScreen({ navigation }) {
   const { orders } = useOrders();
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Meus pedidos</Text>
+      <AppHeader
+        navigation={navigation}
+        onBackPress={() => navigation.getParent()?.navigate('Home')}
+        showBack
+        showMenu={false}
+        title="Meus pedidos"
+      />
       {orders.length === 0 ? (
         <EmptyState
           icon="receipt-outline"
@@ -56,8 +63,7 @@ export function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.canvas, paddingTop: 20 },
-  title: { color: colors.ink, fontSize: 26, fontWeight: '800', paddingHorizontal: 22 },
+  screen: { flex: 1, backgroundColor: colors.canvas },
   list: { padding: 18, gap: 12, paddingBottom: 24 },
   orderCard: {
     padding: 16,

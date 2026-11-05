@@ -7,6 +7,7 @@ import { typography } from '../theme/typography';
 export function AppHeader({
   navigation,
   onMenuPress,
+  onBackPress,
   title = null,
   showBack = false,
   showMenu = true,
@@ -21,7 +22,7 @@ export function AppHeader({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Voltar"
-            onPress={() => navigation?.goBack()}
+            onPress={onBackPress || (() => navigation?.goBack())}
             hitSlop={10}
             style={styles.sideButton}
           >

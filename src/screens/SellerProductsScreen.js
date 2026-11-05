@@ -1,5 +1,6 @@
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AppHeader } from '../components/AppHeader';
 import { ProductImage } from '../components/ProductImage';
 import { useSellerProducts } from '../contexts/SellerProductsContext';
 import { getCategoryLabel } from '../data/categories';
@@ -25,7 +26,13 @@ export function SellerProductsScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Minhas vendas</Text>
+      <AppHeader
+        navigation={navigation}
+        onBackPress={() => navigation.getParent()?.navigate('Home')}
+        showBack
+        showMenu={false}
+        title="Minhas vendas"
+      />
       <Text style={styles.subtitle}>Acompanhe os produtos cadastrados na sua loja.</Text>
 
       <ScrollView contentContainerStyle={styles.list}>
@@ -94,8 +101,7 @@ export function SellerProductsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.canvas, paddingTop: 20 },
-  title: { color: colors.ink, fontSize: 26, fontWeight: '800', paddingHorizontal: 22 },
+  screen: { flex: 1, backgroundColor: colors.canvas },
   subtitle: { color: colors.muted, fontSize: 13, marginTop: 7, paddingHorizontal: 22 },
   list: { padding: 18, gap: 12, paddingBottom: 20 },
   productCard: {
