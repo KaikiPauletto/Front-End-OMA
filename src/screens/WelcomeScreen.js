@@ -1,15 +1,8 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
 export function WelcomeScreen({ navigation }) {
-  function handleGoogleAccess() {
-    Alert.alert(
-      'Google ainda não conectado',
-      'A autenticação com Google será disponibilizada quando a integração estiver pronta.',
-    );
-  }
-
   return (
     <View style={styles.screen}>
       <View style={styles.content}>
@@ -32,19 +25,12 @@ export function WelcomeScreen({ navigation }) {
             <Text style={styles.primaryButtonText}>ENTRAR</Text>
           </Pressable>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>OU</Text>
-            <View style={styles.divider} />
-          </View>
-
           <Pressable
             accessibilityRole="button"
-            onPress={handleGoogleAccess}
-            style={styles.googleButton}
+            onPress={() => navigation.navigate('Register')}
+            style={styles.registerButton}
           >
-            <Ionicons name="logo-google" size={16} color="#4285F4" />
-            <Text style={styles.googleText}>Continue com Google</Text>
+            <Text style={styles.registerButtonText}>CRIAR CONTA</Text>
           </Pressable>
         </View>
       </View>
@@ -113,25 +99,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 25,
-    marginBottom: 25,
-  },
-  divider: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { color: colors.muted, fontSize: 10 },
-  googleButton: {
+  registerButton: {
     height: 52,
     borderRadius: 28,
-    backgroundColor: '#F0EEE9',
-    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.forest,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    marginTop: 14,
   },
-  googleText: { color: colors.ink, fontSize: 12, fontWeight: '600' },
+  registerButtonText: {
+    color: colors.forest,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
   demoNotice: {
     position: 'absolute',
     bottom: 24,

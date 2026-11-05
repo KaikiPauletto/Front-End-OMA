@@ -14,6 +14,7 @@ import { OrdersScreen } from '../screens/OrdersScreen';
 import { ProductDetailsScreen } from '../screens/ProductDetailsScreen';
 import { ProductsScreen } from '../screens/ProductsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { RegisterScreen } from '../screens/RegisterScreen';
 import { SellerProductsScreen } from '../screens/SellerProductsScreen';
 import { AddSellerProductScreen } from '../screens/AddSellerProductScreen';
 import { AnalyticsScreen } from '../screens/AnalyticsScreen';
@@ -191,6 +192,7 @@ export function RootNavigator() {
         <>
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
         </>
       )}
     </Stack.Navigator>
