@@ -35,7 +35,7 @@ export function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <Pressable onPress={() => navigation.goBack()} style={styles.back}>
+      <Pressable onPress={() => navigation.popTo('Welcome')} style={styles.back}>
         <Ionicons name="arrow-back" size={21} color={colors.forest} />
       </Pressable>
       <Text style={styles.brand}>oma<Text style={styles.brandDot}>.</Text></Text>
@@ -88,6 +88,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: 25, justifyContent: 'center' },
   back: {
     position: 'absolute',
+    zIndex: 1,
     top: 54,
     left: 22,
     width: 43,
