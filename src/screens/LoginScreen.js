@@ -64,17 +64,6 @@ export function LoginScreen({ navigation }) {
       <Pressable onPress={handleSubmit} style={styles.submit}>
         <Text style={styles.submitText}>Entrar</Text>
       </Pressable>
-      <Pressable
-        onPress={() =>
-          Alert.alert(
-            'Google ainda não conectado',
-            'A autenticação será configurada quando os dados do provedor estiverem disponíveis.',
-          )
-        }
-        style={styles.googleButton}
-      >
-        <Text style={styles.googleText}>Continuar com Google</Text>
-      </Pressable>
       <Text style={styles.footnote}>
         {DEMO_MODE
           ? 'Contas demonstrativas: usu@gmail.com (cliente) · adm@gmail.com (vendedor). Informe qualquer senha não vazia.'
@@ -122,16 +111,5 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   submitText: { color: colors.white, fontSize: 14, fontWeight: '800' },
-  googleButton: {
-    height: 49,
-    borderRadius: 15,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  googleText: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   footnote: { color: colors.muted, textAlign: 'center', fontSize: 10, lineHeight: 16, marginTop: 22 },
 });
