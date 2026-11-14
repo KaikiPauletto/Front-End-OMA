@@ -13,6 +13,8 @@ import { QuantitySelector } from '../components/QuantitySelector';
 import { CartAddedBar } from '../components/CartAddedBar';
 import { ProductImage } from '../components/ProductImage';
 import { ProductCard } from '../components/ProductCard';
+import { ProductAdminActions } from '../components/ProductAdminActions';
+import { ProductDeactivationModal } from '../components/ProductDeactivationModal';
 import { ProductEditModal } from '../components/ProductEditModal';
 import { SectionTitle } from '../components/SectionTitle';
 import { useAuth } from '../contexts/AuthContext';
@@ -44,6 +46,8 @@ export function ProductDetailsScreen({ navigation, route }) {
     Boolean(route.params?.justAdded) && !isAdministrator,
   );
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [deactivationModalVisible, setDeactivationModalVisible] = useState(false);
+  const [productStatusError, setProductStatusError] = useState('');
   const { addItem, itemCount } = useCart();
   const insets = useSafeAreaInsets();
   const variant = product?.variants?.find((item) => item.id === variantId)
@@ -122,6 +126,37 @@ export function ProductDetailsScreen({ navigation, route }) {
     setCartConfirmationVisible(false);
   }
 
+  function updateProductStatus(active) {
+    const updateProduct = isSellerProduct ? updateSellerProduct : updateCatalogProduct;
+    if (!updateProduct(product.id, { active })) {
+      setProductStatusError('Não foi possível atualizar o produto. Tente novamente.');
+      return false;
+    }
+
+    setProductStatusError('');
+    setCartConfirmationVisible(false);
+    return true;
+  }
+
+  function toggleProductStatus() {
+    if (product.active === false) {
+      updateProductStatus(true);
+      return;
+    }
+
+    setProductStatusError('');
+    setDeactivationModalVisible(true);
+  }
+
+  function confirmProductDeactivation() {
+    if (!updateProductStatus(false)) {
+      return false;
+    }
+
+    setDeactivationModalVisible(false);
+    return true;
+  }
+
   function handleAddRecommendation(recommendedProduct) {
     const result = addItem(recommendedProduct);
     if (result?.ok) {
@@ -194,9 +229,15 @@ export function ProductDetailsScreen({ navigation, route }) {
           ) : null}
 
           <View style={styles.availability}>
-            <Ionicons name="checkmark-circle" size={17} color={colors.forestLight} />
+            <Ionicons
+              name={product.active === false ? 'close-circle' : 'checkmark-circle'}
+              size={17}
+              color={product.active === false ? colors.danger : colors.forestLight}
+            />
             <Text style={styles.availabilityText}>
-              {stock > 0
+              {product.active === false
+                ? 'Produto desativado'
+                : stock > 0
                 ? (isAdministrator ? 'Produto disponível' : 'Disponível para compra')
                 : 'Indisponível no momento'}
             </Text>
@@ -262,10 +303,12 @@ export function ProductDetailsScreen({ navigation, route }) {
 
       {isAdministrator ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-          <Pressable onPress={() => setEditModalVisible(true)} style={styles.editButton}>
-            <Ionicons name="create-outline" size={18} color={colors.white} />
-            <Text style={styles.addButtonText}>Editar produto</Text>
-          </Pressable>
+          <ProductAdminActions
+            active={product.active !== false}
+            error={productStatusError}
+            onEdit={() => setEditModalVisible(true)}
+            onToggleActive={toggleProductStatus}
+          />
         </View>
       ) : !cartConfirmationVisible ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
@@ -293,6 +336,11 @@ export function ProductDetailsScreen({ navigation, route }) {
         price={unitPrice}
         onClose={() => setEditModalVisible(false)}
         onSave={handleSaveEdits}
+      />
+      <ProductDeactivationModal
+        visible={deactivationModalVisible}
+        onCancel={() => setDeactivationModalVisible(false)}
+        onConfirm={confirmProductDeactivation}
       />
     </View>
   );
@@ -363,16 +411,6 @@ const styles = StyleSheet.create({
   total: { color: colors.forest, fontSize: 19, fontWeight: '800', marginTop: 2 },
   addButton: {
     minWidth: 168,
-    height: 49,
-    backgroundColor: colors.forest,
-    borderRadius: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  editButton: {
-    flex: 1,
     height: 49,
     backgroundColor: colors.forest,
     borderRadius: 15,

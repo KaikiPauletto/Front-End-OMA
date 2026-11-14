@@ -52,6 +52,7 @@ const styles = StyleSheet.create({
   },
   primary: { backgroundColor: colors.forest, borderWidth: 1, borderColor: colors.forest },
   outline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.forest },
+  danger: { backgroundColor: colors.danger, borderWidth: 1, borderColor: colors.danger },
   small: { minHeight: 42, paddingHorizontal: 10 },
   medium: { minHeight: 48, paddingHorizontal: 22 },
   label: {
@@ -63,6 +64,7 @@ const styles = StyleSheet.create({
   },
   primaryLabel: { color: colors.white },
   outlineLabel: { color: colors.forest },
+  dangerLabel: { color: colors.white },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.82 },
 });

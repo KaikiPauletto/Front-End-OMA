@@ -33,9 +33,11 @@ export function ProductCard({
             fallbackEmoji={product.emoji || '🧉'}
             accessibilityLabel={product.name}
           />
-          {product.badge ? (
-            <View style={styles.badge}>
-              <Text numberOfLines={1} style={styles.badgeText}>{product.badge}</Text>
+          {product.active === false || product.badge ? (
+            <View style={[styles.badge, product.active === false && styles.inactiveBadge]}>
+              <Text numberOfLines={1} style={styles.badgeText}>
+                {product.active === false ? 'Desativado' : product.badge}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -108,6 +110,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 999,
   },
+  inactiveBadge: { backgroundColor: colors.danger },
   badgeText: {
     color: colors.white,
     fontFamily: typography.family.bodyMedium,

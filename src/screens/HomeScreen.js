@@ -54,7 +54,10 @@ export function HomeScreen({ navigation }) {
   const { addItem } = useCart();
   const { products } = useProductCatalog();
 
-  const availableProducts = useMemo(() => getAvailableProducts(products), [products]);
+  const availableProducts = useMemo(
+    () => (user?.role === 'ADMINISTRADOR' ? products : getAvailableProducts(products)),
+    [products, user?.role],
+  );
   const featuredProducts = useMemo(
     () => sortProducts(availableProducts, 'bestsellers').slice(0, 5),
     [availableProducts],

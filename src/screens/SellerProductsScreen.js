@@ -37,7 +37,7 @@ export function SellerProductsScreen({ navigation }) {
 
       <ScrollView contentContainerStyle={styles.list}>
         {products.map((product) => {
-          const isAvailable = product.quantity > 0;
+          const isAvailable = product.active !== false && product.quantity > 0;
           return (
             <View key={product.id} style={styles.productCard}>
               <Pressable
@@ -67,7 +67,9 @@ export function SellerProductsScreen({ navigation }) {
                           isAvailable ? styles.availableText : styles.soldText,
                         ]}
                       >
-                        {isAvailable ? 'Disponível' : 'Vendido'}
+                        {product.active === false
+                          ? 'Desativado'
+                          : isAvailable ? 'Disponível' : 'Vendido'}
                       </Text>
                     </View>
                   </View>

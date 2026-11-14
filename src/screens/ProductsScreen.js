@@ -21,6 +21,7 @@ import {
   sortProducts,
 } from '../data/products';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useProductCatalog } from '../contexts/ProductCatalogContext';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -34,6 +35,7 @@ export function ProductsScreen({ navigation, route }) {
   const [filterVisible, setFilterVisible] = useState(false);
   const [sortVisible, setSortVisible] = useState(false);
   const [cartConfirmationVisible, setCartConfirmationVisible] = useState(false);
+  const { user } = useAuth();
   const { addItem, itemCount } = useCart();
   const { products } = useProductCatalog();
 
@@ -46,7 +48,10 @@ export function ProductsScreen({ navigation, route }) {
 
   const selectedCategory = getCategoryById(categoryId);
   const selectedSubcategory = getSubcategoryById(categoryId, subcategoryId);
-  const availableProducts = useMemo(() => getAvailableProducts(products), [products]);
+  const availableProducts = useMemo(
+    () => (user?.role === 'ADMINISTRADOR' ? products : getAvailableProducts(products)),
+    [products, user?.role],
+  );
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
