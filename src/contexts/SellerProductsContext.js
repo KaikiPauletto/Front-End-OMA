@@ -6,8 +6,12 @@ const initialSellerProducts = [
   {
     id: 'seller-cuia-artesanal',
     name: 'Cuia artesanal de porongo',
+    brand: 'Artesanal',
+    model: 'Porongo',
+    price: 89.9,
     quantity: 3,
     category: 'cuias',
+    subcategory: 'cuia-porongo',
     description: 'Cuia artesanal com acabamento natural.',
     image: {
       uri: 'https://images.tcdn.com.br/img/img_prod/1149218/cuia_de_chimarro_getulinho_virola_de_alpaca_1_20260528164346_f831a6a80106.jpg',
@@ -16,8 +20,12 @@ const initialSellerProducts = [
   {
     id: 'seller-bomba-inox',
     name: 'Bomba de inox',
+    brand: 'Inox',
+    model: 'Desmontável',
+    price: 49.9,
     quantity: 0,
     category: 'bombas',
+    subcategory: 'bomba-inox',
     description: 'Bomba de inox vendida em um pedido de demonstração.',
     image: {
       uri: 'https://images.colombo.com.br/produtos/4241688/4241688_Bomba_De_Chimarrao_Aco_Inox_304_Desmontavel_Com_Escovinha_10365899_z.jpg',
@@ -41,8 +49,20 @@ export function SellerProductsProvider({ children }) {
     );
   }
 
+  function updateProduct(productId, updates) {
+    const productExists = products.some((product) => product.id === productId);
+    if (!productExists) {
+      return false;
+    }
+
+    setProducts((currentProducts) => currentProducts.map((product) => (
+      product.id === productId ? { ...product, ...updates } : product
+    )));
+    return true;
+  }
+
   const value = useMemo(
-    () => ({ products, addProduct, removeProduct }),
+    () => ({ products, addProduct, removeProduct, updateProduct }),
     [products],
   );
 

@@ -1,13 +1,15 @@
 import { ScrollView, StyleSheet, Text, Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppHeader } from '../components/AppHeader';
+import { useProductCatalog } from '../contexts/ProductCatalogContext';
 import { categories } from '../data/categories';
 import { getAvailableProducts } from '../data/products';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
 export function CategoriesScreen({ navigation }) {
-  const availableProducts = getAvailableProducts();
+  const { products } = useProductCatalog();
+  const availableProducts = getAvailableProducts(products);
 
   return (
     <View style={styles.screen}>

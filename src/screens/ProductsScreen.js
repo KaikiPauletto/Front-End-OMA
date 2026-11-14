@@ -21,6 +21,7 @@ import {
   sortProducts,
 } from '../data/products';
 import { useCart } from '../contexts/CartContext';
+import { useProductCatalog } from '../contexts/ProductCatalogContext';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
@@ -34,6 +35,7 @@ export function ProductsScreen({ navigation, route }) {
   const [sortVisible, setSortVisible] = useState(false);
   const [cartConfirmationVisible, setCartConfirmationVisible] = useState(false);
   const { addItem, itemCount } = useCart();
+  const { products } = useProductCatalog();
 
   useEffect(() => {
     setSearch(route.params?.searchQuery ?? '');
@@ -44,7 +46,7 @@ export function ProductsScreen({ navigation, route }) {
 
   const selectedCategory = getCategoryById(categoryId);
   const selectedSubcategory = getSubcategoryById(categoryId, subcategoryId);
-  const availableProducts = useMemo(() => getAvailableProducts(), []);
+  const availableProducts = useMemo(() => getAvailableProducts(products), [products]);
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -136,6 +138,10 @@ export function ProductsScreen({ navigation, route }) {
             layout="grid"
             onPress={() => openProduct(item)}
             onAddToCart={() => handleAdd(item)}
+            onEdit={() => navigation.navigate('ProductDetails', {
+              productId: item.id,
+              editOnOpen: true,
+            })}
           />
         )}
       />

@@ -13,27 +13,46 @@ import { QuantitySelector } from '../components/QuantitySelector';
 import { CartAddedBar } from '../components/CartAddedBar';
 import { ProductImage } from '../components/ProductImage';
 import { ProductCard } from '../components/ProductCard';
+import { ProductEditModal } from '../components/ProductEditModal';
 import { SectionTitle } from '../components/SectionTitle';
+import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useProductCatalog } from '../contexts/ProductCatalogContext';
+import { useSellerProducts } from '../contexts/SellerProductsContext';
 import {
   getAvailableProducts,
   getMaximumPurchase,
   getProductPrice,
   getProductStock,
-  products,
 } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
 export function ProductDetailsScreen({ navigation, route }) {
-  const product = products.find((item) => item.id === route.params?.productId);
-  const [variant, setVariant] = useState(product?.variants?.[0] ?? null);
+  const { user } = useAuth();
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
+  const { products: catalogProducts, updateProduct: updateCatalogProduct } = useProductCatalog();
+  const { products: sellerProducts, updateProduct: updateSellerProduct } = useSellerProducts();
+  const catalogProduct = catalogProducts.find((item) => item.id === route.params?.productId);
+  const sellerProduct = sellerProducts.find((item) => item.id === route.params?.productId);
+  const product = catalogProduct ?? sellerProduct;
+  const isSellerProduct = !catalogProduct && Boolean(sellerProduct);
+  const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
   const [quantity, setQuantity] = useState(1);
-  const [cartConfirmationVisible, setCartConfirmationVisible] = useState(Boolean(route.params?.justAdded));
+  const [cartConfirmationVisible, setCartConfirmationVisible] = useState(
+    Boolean(route.params?.justAdded) && !isAdministrator,
+  );
+  const [editModalVisible, setEditModalVisible] = useState(false);
   const { addItem, itemCount } = useCart();
   const insets = useSafeAreaInsets();
-  const availableProducts = useMemo(() => getAvailableProducts(), []);
+  const variant = product?.variants?.find((item) => item.id === variantId)
+    ?? product?.variants?.[0]
+    ?? null;
+  const availableProducts = useMemo(
+    () => getAvailableProducts(catalogProducts),
+    [catalogProducts],
+  );
   const similarProducts = useMemo(
     () => availableProducts
       .filter((item) => item.id !== product?.id && item.category === product?.category)
@@ -48,10 +67,17 @@ export function ProductDetailsScreen({ navigation, route }) {
   );
 
   useEffect(() => {
-    setVariant(product?.variants?.[0] ?? null);
+    setVariantId(product?.variants?.[0]?.id ?? null);
     setQuantity(1);
-    setCartConfirmationVisible(Boolean(route.params?.justAdded));
-  }, [product?.id, route.params?.justAdded]);
+    setCartConfirmationVisible(Boolean(route.params?.justAdded) && !isAdministrator);
+  }, [product?.id, route.params?.justAdded, isAdministrator]);
+
+  useEffect(() => {
+    if (isAdministrator && route.params?.editOnOpen) {
+      setEditModalVisible(true);
+      navigation.setParams({ editOnOpen: false });
+    }
+  }, [isAdministrator, navigation, route.params?.editOnOpen]);
 
   if (!product) {
     return (
@@ -78,6 +104,24 @@ export function ProductDetailsScreen({ navigation, route }) {
     }
   }
 
+  function handleSaveEdits(editedProduct) {
+    const updates = { ...editedProduct };
+    if (product.variants?.length && variant) {
+      updates.variants = product.variants.map((item) => (
+        item.id === variant.id ? { ...item, price: editedProduct.price } : item
+      ));
+    }
+
+    const updateProduct = isSellerProduct ? updateSellerProduct : updateCatalogProduct;
+    if (!updateProduct(product.id, updates)) {
+      Alert.alert('Não foi possível salvar', 'O produto não foi encontrado no catálogo.');
+      return;
+    }
+
+    setEditModalVisible(false);
+    setCartConfirmationVisible(false);
+  }
+
   function handleAddRecommendation(recommendedProduct) {
     const result = addItem(recommendedProduct);
     if (result?.ok) {
@@ -89,6 +133,13 @@ export function ProductDetailsScreen({ navigation, route }) {
 
   function openProduct(recommendedProduct) {
     navigation.navigate('ProductDetails', { productId: recommendedProduct.id });
+  }
+
+  function openProductEditor(recommendedProduct) {
+    navigation.navigate('ProductDetails', {
+      productId: recommendedProduct.id,
+      editOnOpen: true,
+    });
   }
 
   return (
@@ -127,7 +178,7 @@ export function ProductDetailsScreen({ navigation, route }) {
                     <Pressable
                       key={item.id}
                       onPress={() => {
-                        setVariant(item);
+                        setVariantId(item.id);
                         setQuantity(1);
                       }}
                       style={[styles.variant, selected && styles.variantSelected]}
@@ -145,7 +196,9 @@ export function ProductDetailsScreen({ navigation, route }) {
           <View style={styles.availability}>
             <Ionicons name="checkmark-circle" size={17} color={colors.forestLight} />
             <Text style={styles.availabilityText}>
-              {stock > 0 ? 'Disponível para compra' : 'Indisponível no momento'}
+              {stock > 0
+                ? (isAdministrator ? 'Produto disponível' : 'Disponível para compra')
+                : 'Indisponível no momento'}
             </Text>
           </View>
           <Text style={styles.typeDescription}>
@@ -154,7 +207,7 @@ export function ProductDetailsScreen({ navigation, route }) {
               : 'Produto por quantidade. Disponibilidade sujeita à confirmação.'}
           </Text>
 
-          {product.type !== 'UNITÁRIO' && stock > 0 ? (
+          {!isAdministrator && product.type !== 'UNITÁRIO' && stock > 0 ? (
             <View style={styles.quantityRow}>
               <Text style={styles.optionTitle}>Quantidade</Text>
               <QuantitySelector value={quantity} maximum={maximum} onChange={setQuantity} />
@@ -177,6 +230,7 @@ export function ProductDetailsScreen({ navigation, route }) {
                   layout="compact"
                   onPress={() => openProduct(item)}
                   onAddToCart={() => handleAddRecommendation(item)}
+                  onEdit={() => openProductEditor(item)}
                 />
               ))}
             </ScrollView>
@@ -198,6 +252,7 @@ export function ProductDetailsScreen({ navigation, route }) {
                   layout="compact"
                   onPress={() => openProduct(item)}
                   onAddToCart={() => handleAddRecommendation(item)}
+                  onEdit={() => openProductEditor(item)}
                 />
               ))}
             </ScrollView>
@@ -205,21 +260,39 @@ export function ProductDetailsScreen({ navigation, route }) {
         ) : null}
       </ScrollView>
 
-      {!cartConfirmationVisible ? <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
-        <View>
-          <Text style={styles.totalLabel}>Valor demonstrativo</Text>
-          <Text style={styles.total}>{formatCurrency(unitPrice * quantity)}</Text>
+      {isAdministrator ? (
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+          <Pressable onPress={() => setEditModalVisible(true)} style={styles.editButton}>
+            <Ionicons name="create-outline" size={18} color={colors.white} />
+            <Text style={styles.addButtonText}>Editar produto</Text>
+          </Pressable>
         </View>
-        <Pressable disabled={stock <= 0} onPress={handleAdd} style={[styles.addButton, stock <= 0 && styles.disabledButton]}>
-          <Ionicons name="bag-add-outline" size={18} color={colors.white} />
-          <Text style={styles.addButtonText}>Adicionar ao carrinho</Text>
-        </Pressable>
-      </View> : null}
-      <CartAddedBar
-        visible={cartConfirmationVisible}
-        itemCount={itemCount}
-        onClose={() => setCartConfirmationVisible(false)}
-        onContinue={() => { setCartConfirmationVisible(false); navigation.navigate('MainTabs', { screen: 'Carrinho' }); }}
+      ) : !cartConfirmationVisible ? (
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+          <View>
+            <Text style={styles.totalLabel}>Valor demonstrativo</Text>
+            <Text style={styles.total}>{formatCurrency(unitPrice * quantity)}</Text>
+          </View>
+          <Pressable disabled={stock <= 0} onPress={handleAdd} style={[styles.addButton, stock <= 0 && styles.disabledButton]}>
+            <Ionicons name="bag-add-outline" size={18} color={colors.white} />
+            <Text style={styles.addButtonText}>Adicionar ao carrinho</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {!isAdministrator ? (
+        <CartAddedBar
+          visible={cartConfirmationVisible}
+          itemCount={itemCount}
+          onClose={() => setCartConfirmationVisible(false)}
+          onContinue={() => { setCartConfirmationVisible(false); navigation.navigate('MainTabs', { screen: 'Carrinho' }); }}
+        />
+      ) : null}
+      <ProductEditModal
+        visible={editModalVisible}
+        product={product}
+        price={unitPrice}
+        onClose={() => setEditModalVisible(false)}
+        onSave={handleSaveEdits}
       />
     </View>
   );
@@ -290,6 +363,16 @@ const styles = StyleSheet.create({
   total: { color: colors.forest, fontSize: 19, fontWeight: '800', marginTop: 2 },
   addButton: {
     minWidth: 168,
+    height: 49,
+    backgroundColor: colors.forest,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  editButton: {
+    flex: 1,
     height: 49,
     backgroundColor: colors.forest,
     borderRadius: 15,

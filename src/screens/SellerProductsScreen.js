@@ -40,47 +40,54 @@ export function SellerProductsScreen({ navigation }) {
           const isAvailable = product.quantity > 0;
           return (
             <View key={product.id} style={styles.productCard}>
-              <ProductImage
-                accessibilityLabel={product.name}
-                fallbackEmoji="🧉"
-                resizeMode="cover"
-                source={product.image}
-                style={styles.productImage}
-              />
-              <View style={styles.productDetails}>
-                <View style={styles.statusRow}>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      isAvailable ? styles.availableBadge : styles.soldBadge,
-                    ]}
-                  >
-                    <Text
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Visualizar ${product.name}`}
+                onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
+                style={styles.productContent}
+              >
+                <ProductImage
+                  accessibilityLabel={product.name}
+                  fallbackEmoji="🧉"
+                  resizeMode="cover"
+                  source={product.image}
+                  style={styles.productImage}
+                />
+                <View style={styles.productDetails}>
+                  <View style={styles.statusRow}>
+                    <View
                       style={[
-                        styles.statusText,
-                        isAvailable ? styles.availableText : styles.soldText,
+                        styles.statusBadge,
+                        isAvailable ? styles.availableBadge : styles.soldBadge,
                       ]}
                     >
-                      {isAvailable ? 'Disponível' : 'Vendido'}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.statusText,
+                          isAvailable ? styles.availableText : styles.soldText,
+                        ]}
+                      >
+                        {isAvailable ? 'Disponível' : 'Vendido'}
+                      </Text>
+                    </View>
                   </View>
-                  {isAvailable ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Excluir ${product.name}`}
-                      onPress={() => confirmProductRemoval(product)}
-                      style={styles.deleteButton}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                    </Pressable>
-                  ) : null}
+                  <Text numberOfLines={2} style={styles.productName}>{product.name}</Text>
+                  <Text style={styles.category}>{getCategoryLabel(product.category)}</Text>
+                  <Text style={styles.quantity}>
+                    {isAvailable ? `${product.quantity} unidade(s)` : 'Sem unidades em estoque'}
+                  </Text>
                 </View>
-                <Text numberOfLines={2} style={styles.productName}>{product.name}</Text>
-                <Text style={styles.category}>{getCategoryLabel(product.category)}</Text>
-                <Text style={styles.quantity}>
-                  {isAvailable ? `${product.quantity} unidade(s)` : 'Sem unidades em estoque'}
-                </Text>
-              </View>
+              </Pressable>
+              {isAvailable ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Excluir ${product.name}`}
+                  onPress={() => confirmProductRemoval(product)}
+                  style={styles.deleteButton}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                </Pressable>
+              ) : null}
             </View>
           );
         })}
@@ -103,6 +110,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  productContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   productImage: { width: 92, height: 94, borderRadius: 12, backgroundColor: colors.surfaceMuted },
   productDetails: { flex: 1, marginLeft: 12, justifyContent: 'center' },
   statusRow: {

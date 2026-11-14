@@ -1,13 +1,22 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppButton } from './AppButton';
 import { ProductImage } from './ProductImage';
+import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { formatCurrency } from '../utils/formatCurrency';
 
-export function ProductCard({ product, onPress, onAddToCart, layout = 'horizontal' }) {
+export function ProductCard({
+  product,
+  onPress,
+  onAddToCart,
+  onEdit,
+  layout = 'horizontal',
+}) {
+  const { user } = useAuth();
   const isGrid = layout === 'grid';
   const isCompact = layout === 'compact';
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
 
   return (
     <View style={[styles.card, isGrid && styles.gridCard, isCompact && styles.compactCard]}>
@@ -35,21 +44,23 @@ export function ProductCard({ product, onPress, onAddToCart, layout = 'horizonta
           <Text style={styles.price}>{formatCurrency(product.price)}</Text>
         </View>
       </Pressable>
-      <View style={[
-        styles.buttonContainer,
-        isGrid && styles.gridButtonContainer,
-        isCompact && styles.compactButtonContainer,
-      ]}>
-        <AppButton
-          title="Adicionar"
-          icon="bag-add-outline"
-          variant="outline"
-          size="small"
-          onPress={onAddToCart}
-          style={styles.addButton}
-          textStyle={styles.addButtonText}
-        />
-      </View>
+      {(!isAdministrator || onEdit) ? (
+        <View style={[
+          styles.buttonContainer,
+          isGrid && styles.gridButtonContainer,
+          isCompact && styles.compactButtonContainer,
+        ]}>
+          <AppButton
+            title={isAdministrator ? 'Editar produto' : 'Adicionar'}
+            icon={isAdministrator ? 'create-outline' : 'bag-add-outline'}
+            variant="outline"
+            size="small"
+            onPress={isAdministrator ? onEdit : onAddToCart}
+            style={styles.addButton}
+            textStyle={styles.addButtonText}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -210,7 +210,7 @@ export function sortProducts(productList, sortBy) {
 }
 
 export function getProductStock(product, variant) {
-  return variant?.stock ?? product.stock;
+  return variant?.stock ?? product.stock ?? product.quantity ?? 0;
 }
 
 export function getProductPrice(product, variant) {
@@ -222,8 +222,8 @@ export function getMaximumPurchase(product, variant) {
   return Math.min(stock, product.maxPurchase ?? stock);
 }
 
-export function getAvailableProducts() {
-  return products.filter((product) => (
+export function getAvailableProducts(productList = products) {
+  return productList.filter((product) => (
     product.active !== false &&
     (product.variants?.length
       ? product.variants.some((variant) => variant.stock > 0)
@@ -231,6 +231,6 @@ export function getAvailableProducts() {
   ));
 }
 
-export function getBestSellingProducts() {
-  return sortProducts(getAvailableProducts(), 'bestsellers');
+export function getBestSellingProducts(productList = products) {
+  return sortProducts(getAvailableProducts(productList), 'bestsellers');
 }

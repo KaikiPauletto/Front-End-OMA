@@ -30,7 +30,7 @@ export function RegisterScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
-      <Pressable onPress={() => navigation.goBack()} style={styles.back}>
+      <Pressable onPress={() => navigation.popTo('Welcome')} style={styles.back}>
         <Ionicons name="arrow-back" size={21} color={colors.forest} />
       </Pressable>
       <ScrollView
@@ -123,6 +123,7 @@ const styles = StyleSheet.create({
   formContent: { flexGrow: 1, justifyContent: 'center', paddingTop: 32, paddingBottom: 24 },
   back: {
     position: 'absolute',
+    zIndex: 1,
     top: 54,
     left: 22,
     width: 43,

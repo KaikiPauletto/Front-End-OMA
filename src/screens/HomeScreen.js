@@ -20,6 +20,7 @@ import { ProductCard } from '../components/ProductCard';
 import { SectionTitle } from '../components/SectionTitle';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useProductCatalog } from '../contexts/ProductCatalogContext';
 import { categories, getCategoryById } from '../data/categories';
 import {
   getAvailableProducts,
@@ -51,8 +52,9 @@ export function HomeScreen({ navigation }) {
   const heroHeight = Math.min(400, Math.max(300, (screenWidth - 40) * (400 / 350)));
   const { user } = useAuth();
   const { addItem } = useCart();
+  const { products } = useProductCatalog();
 
-  const availableProducts = useMemo(() => getAvailableProducts(), []);
+  const availableProducts = useMemo(() => getAvailableProducts(products), [products]);
   const featuredProducts = useMemo(
     () => sortProducts(availableProducts, 'bestsellers').slice(0, 5),
     [availableProducts],
@@ -161,6 +163,10 @@ export function HomeScreen({ navigation }) {
                 product={product}
                 onPress={() => openProduct(product)}
                 onAddToCart={() => handleAddToCart(product)}
+                onEdit={() => navigation.navigate('ProductDetails', {
+                  productId: product.id,
+                  editOnOpen: true,
+                })}
               />
             ))}
           </ScrollView>
@@ -227,6 +233,10 @@ export function HomeScreen({ navigation }) {
                     layout="grid"
                     onPress={() => openProduct(product)}
                     onAddToCart={() => handleAddToCart(product)}
+                    onEdit={() => navigation.navigate('ProductDetails', {
+                      productId: product.id,
+                      editOnOpen: true,
+                    })}
                   />
                 ))}
                 {row.length === 1 ? <View style={styles.gridPlaceholder} /> : null}
