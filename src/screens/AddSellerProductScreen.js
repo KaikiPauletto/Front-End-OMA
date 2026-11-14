@@ -18,14 +18,48 @@ import { useSellerProducts } from '../contexts/SellerProductsContext';
 import { categories } from '../data/categories';
 import { colors } from '../theme/colors';
 
+const priceInputFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatPriceInput(value) {
+  const digits = value.replace(/\D/g, '');
+  return digits
+    ? priceInputFormatter.format(Number(digits) / 100)
+    : '';
+}
+
+function parsePrice(value) {
+  const normalized = value.replace(/[^\d.,]/g, '');
+  const separatorIndex = Math.max(normalized.lastIndexOf(','), normalized.lastIndexOf('.'));
+  const integerPart = separatorIndex >= 0
+    ? normalized.slice(0, separatorIndex)
+    : normalized;
+  const fractionalPart = separatorIndex >= 0
+    ? normalized.slice(separatorIndex + 1)
+    : '';
+  const cents = fractionalPart.replace(/\D/g, '');
+
+  if (cents.length > 2) {
+    return Number.NaN;
+  }
+
+  const amount = `${integerPart.replace(/\D/g, '') || '0'}${cents ? `.${cents}` : ''}`;
+  return Number(amount);
+}
+
 export function AddSellerProductScreen({ navigation }) {
   const { addProduct } = useSellerProducts();
   const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [category, setCategory] = useState(null);
+  const [model, setModel] = useState('');
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [description, setDescription] = useState('');
   const [image, setImage] = useState(null);
-  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  const [subcategoryPickerVisible, setSubcategoryPickerVisible] = useState(false);
 
   async function handleSelectImage() {
     try {
@@ -58,33 +92,40 @@ export function AddSellerProductScreen({ navigation }) {
 
   function handleSubmit() {
     const parsedQuantity = Number(quantity);
+    const parsedPrice = parsePrice(price);
     if (
       !image ||
       !name.trim() ||
+      !brand.trim() ||
+      !Number.isFinite(parsedPrice) ||
+      parsedPrice <= 0 ||
       !quantity.trim() ||
       !Number.isInteger(parsedQuantity) ||
       parsedQuantity < 0 ||
-      !category ||
+      !model.trim() ||
+      !selectedSubcategory ||
       !description.trim()
     ) {
       Alert.alert(
         'Dados incompletos',
-        'Anexe uma foto e preencha nome, quantidade, categoria e informações do produto.',
+        'Anexe uma foto e preencha nome, marca, preço, quantidade, modelo, subcategoria e informações do produto.',
       );
       return;
     }
 
     addProduct({
       name: name.trim(),
+      brand: brand.trim(),
+      price: parsedPrice,
       quantity: parsedQuantity,
-      category,
+      model: model.trim(),
+      category: selectedSubcategory.categoryId,
+      subcategory: selectedSubcategory.id,
       description: description.trim(),
       image,
     });
     navigation.navigate('Vendas');
   }
-
-  const selectedCategory = categories.find((item) => item.id === category);
 
   return (
     <KeyboardAvoidingView
@@ -132,6 +173,28 @@ export function AddSellerProductScreen({ navigation }) {
           value={name}
         />
 
+        <Text style={styles.label}>Marca</Text>
+        <TextInput
+          onChangeText={setBrand}
+          placeholder="Marca do produto"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={brand}
+        />
+
+        <Text style={styles.label}>Preço</Text>
+        <View style={styles.priceInputContainer}>
+          <Text style={styles.currencyPrefix}>R$</Text>
+          <TextInput
+            keyboardType="number-pad"
+            onChangeText={(value) => setPrice(formatPriceInput(value))}
+            placeholder="0,00"
+            placeholderTextColor={colors.muted}
+            style={styles.priceInput}
+            value={price}
+          />
+        </View>
+
         <Text style={styles.label}>Quantidade</Text>
         <TextInput
           keyboardType="number-pad"
@@ -142,14 +205,25 @@ export function AddSellerProductScreen({ navigation }) {
           value={quantity}
         />
 
-        <Text style={styles.label}>Categoria</Text>
+        <Text style={styles.label}>Modelo</Text>
+        <TextInput
+          onChangeText={setModel}
+          placeholder="Modelo do produto"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={model}
+        />
+
+        <Text style={styles.label}>Subcategoria</Text>
         <Pressable
           accessibilityRole="button"
-          onPress={() => setCategoryPickerVisible(true)}
+          onPress={() => setSubcategoryPickerVisible(true)}
           style={styles.categoryButton}
         >
-          <Text style={selectedCategory ? styles.categorySelected : styles.categoryPlaceholder}>
-            {selectedCategory?.name ?? 'Selecione uma categoria'}
+          <Text style={selectedSubcategory ? styles.categorySelected : styles.categoryPlaceholder}>
+            {selectedSubcategory
+              ? `${selectedSubcategory.name} (${selectedSubcategory.categoryName})`
+              : 'Selecione uma subcategoria'}
           </Text>
           <Ionicons name="chevron-down" size={18} color={colors.muted} />
         </Pressable>
@@ -178,37 +252,47 @@ export function AddSellerProductScreen({ navigation }) {
 
       <Modal
         animationType="slide"
-        onRequestClose={() => setCategoryPickerVisible(false)}
+        onRequestClose={() => setSubcategoryPickerVisible(false)}
         transparent
-        visible={categoryPickerVisible}
+        visible={subcategoryPickerVisible}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Escolha uma categoria</Text>
+              <Text style={styles.modalTitle}>Escolha uma subcategoria</Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Fechar categorias"
-                onPress={() => setCategoryPickerVisible(false)}
+                accessibilityLabel="Fechar subcategorias"
+                onPress={() => setSubcategoryPickerVisible(false)}
               >
                 <Ionicons name="close" size={24} color={colors.ink} />
               </Pressable>
             </View>
             <ScrollView>
-              {categories.map((item) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => {
-                    setCategory(item.id);
-                    setCategoryPickerVisible(false);
-                  }}
-                  style={styles.categoryOption}
-                >
-                  <Text style={styles.categoryOptionText}>{item.name}</Text>
-                  {category === item.id ? (
-                    <Ionicons name="checkmark" size={20} color={colors.forest} />
-                  ) : null}
-                </Pressable>
+              {categories.map((categoryItem) => (
+                <View key={categoryItem.id}>
+                  <Text style={styles.categoryGroupTitle}>{categoryItem.name}</Text>
+                  {categoryItem.subcategories.map((subcategory) => (
+                    <Pressable
+                      key={subcategory.id}
+                      onPress={() => {
+                        setSelectedSubcategory({
+                          ...subcategory,
+                          categoryId: categoryItem.id,
+                          categoryName: categoryItem.name,
+                        });
+                        setSubcategoryPickerVisible(false);
+                      }}
+                      style={styles.categoryOption}
+                    >
+                      <Text style={styles.categoryOptionText}>{subcategory.name}</Text>
+                      {selectedSubcategory?.id === subcategory.id &&
+                      selectedSubcategory.categoryId === categoryItem.id ? (
+                        <Ionicons name="checkmark" size={20} color={colors.forest} />
+                      ) : null}
+                    </Pressable>
+                  ))}
+                </View>
               ))}
             </ScrollView>
           </View>
@@ -257,6 +341,19 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: 15,
   },
+  priceInputContainer: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  currencyPrefix: { color: colors.muted, fontSize: 14, marginRight: 8 },
+  priceInput: { flex: 1, color: colors.ink, paddingVertical: 12 },
   categoryButton: {
     minHeight: 48,
     borderRadius: 14,
@@ -316,6 +413,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  categoryGroupTitle: {
+    color: colors.forest,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 12,
+    marginBottom: 4,
   },
   categoryOptionText: { color: colors.ink, fontSize: 14 },
 });

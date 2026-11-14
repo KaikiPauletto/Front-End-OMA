@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { DEMO_MODE } from '../config/appConfig';
@@ -33,83 +33,94 @@ export function RegisterScreen({ navigation }) {
       <Pressable onPress={() => navigation.goBack()} style={styles.back}>
         <Ionicons name="arrow-back" size={21} color={colors.forest} />
       </Pressable>
-      <Text style={styles.brand}>oma<Text style={styles.brandDot}>.</Text></Text>
-      <Text style={styles.title}>Faça parte da roda.</Text>
-      <Text style={styles.subtitle}>Crie sua conta para acompanhar teus pedidos e endereços.</Text>
+      <ScrollView
+        contentContainerStyle={styles.formContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Image
+          accessibilityLabel="Logo OMA"
+          resizeMode="contain"
+          source={require('../assets/oma-logo.png')}
+          style={styles.brandLogo}
+        />
+        <Text style={styles.title}>Faça parte da roda.</Text>
+        <Text style={styles.subtitle}>Crie sua conta para acompanhar teus pedidos e endereços.</Text>
 
-      <Text style={styles.label}>Quero me cadastrar como</Text>
-      <View style={styles.accountTypeOptions}>
-        {[
-          { value: 'customer', label: 'Cliente' },
-          { value: 'seller', label: 'Vendedor' },
-        ].map((option) => {
-          const isSelected = accountType === option.value;
-          return (
-            <Pressable
-              key={option.value}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: isSelected }}
-              onPress={() => setAccountType(option.value)}
-              style={[
-                styles.accountTypeOption,
-                isSelected && styles.accountTypeOptionSelected,
-              ]}
-            >
-              <Text
+        <Text style={styles.label}>Quero me cadastrar como</Text>
+        <View style={styles.accountTypeOptions}>
+          {[
+            { value: 'customer', label: 'Cliente' },
+            { value: 'seller', label: 'Vendedor' },
+          ].map((option) => {
+            const isSelected = accountType === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                onPress={() => setAccountType(option.value)}
                 style={[
-                  styles.accountTypeOptionText,
-                  isSelected && styles.accountTypeOptionTextSelected,
+                  styles.accountTypeOption,
+                  isSelected && styles.accountTypeOptionSelected,
                 ]}
               >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                <Text
+                  style={[
+                    styles.accountTypeOptionText,
+                    isSelected && styles.accountTypeOptionTextSelected,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
-      <Text style={styles.label}>Nome</Text>
-      <TextInput
-        autoCapitalize="words"
-        onChangeText={setName}
-        placeholder="Como podemos te chamar?"
-        placeholderTextColor={colors.muted}
-        style={styles.input}
-        value={name}
-      />
-      <Text style={styles.label}>E-mail</Text>
-      <TextInput
-        autoCapitalize="none"
-        keyboardType="email-address"
-        onChangeText={setEmail}
-        placeholder="voce@email.com"
-        placeholderTextColor={colors.muted}
-        style={styles.input}
-        value={email}
-      />
-      <Text style={styles.label}>Senha</Text>
-      <TextInput
-        onChangeText={setPassword}
-        placeholder="Crie uma senha"
-        placeholderTextColor={colors.muted}
-        secureTextEntry
-        style={styles.input}
-        value={password}
-      />
-      <Pressable onPress={handleSubmit} style={styles.submit}>
-        <Text style={styles.submitText}>Criar conta</Text>
-      </Pressable>
-      <Text style={styles.footnote}>
-        {DEMO_MODE
-          ? 'Modo demonstração: continuar não cria uma conta nem envia os dados.'
-          : 'O cadastro será habilitado após a definição dos campos e integração com o backend.'}
-      </Text>
+        <Text style={styles.label}>Nome</Text>
+        <TextInput
+          autoCapitalize="words"
+          onChangeText={setName}
+          placeholder="Como podemos te chamar?"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={name}
+        />
+        <Text style={styles.label}>E-mail</Text>
+        <TextInput
+          autoCapitalize="none"
+          keyboardType="email-address"
+          onChangeText={setEmail}
+          placeholder="voce@email.com"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={email}
+        />
+        <Text style={styles.label}>Senha</Text>
+        <TextInput
+          onChangeText={setPassword}
+          placeholder="Crie uma senha"
+          placeholderTextColor={colors.muted}
+          secureTextEntry
+          style={styles.input}
+          value={password}
+        />
+        <Pressable onPress={handleSubmit} style={styles.submit}>
+          <Text style={styles.submitText}>Criar conta</Text>
+        </Pressable>
+        <Text style={styles.footnote}>
+          {DEMO_MODE
+            ? 'Modo demonstração: continuar não cria uma conta nem envia os dados.'
+            : 'O cadastro será habilitado após a definição dos campos e integração com o backend.'}
+        </Text>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: 25, justifyContent: 'center' },
+  screen: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: 25 },
+  formContent: { flexGrow: 1, justifyContent: 'center', paddingTop: 32, paddingBottom: 24 },
   back: {
     position: 'absolute',
     top: 54,
@@ -121,8 +132,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: { color: colors.forest, fontSize: 39, fontWeight: '900', letterSpacing: -2, textAlign: 'center' },
-  brandDot: { color: colors.clay },
+  brandLogo: {
+    width: 174,
+    height: 174,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
   title: { color: colors.ink, fontSize: 25, fontWeight: '800', textAlign: 'center', marginTop: 18 },
   subtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 24 },
   label: { color: colors.ink, fontSize: 12, fontWeight: '700', marginBottom: 7 },

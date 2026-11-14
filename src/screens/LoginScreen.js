@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { DEMO_MODE } from '../config/appConfig';
@@ -38,54 +38,54 @@ export function LoginScreen({ navigation }) {
       <Pressable onPress={() => navigation.goBack()} style={styles.back}>
         <Ionicons name="arrow-back" size={21} color={colors.forest} />
       </Pressable>
-      <Text style={styles.brand}>oma<Text style={styles.brandDot}>.</Text></Text>
-      <Text style={styles.title}>Que bom te ver.</Text>
-      <Text style={styles.subtitle}>Entre para acompanhar teus pedidos e continuar teu mate.</Text>
-
-      <Text style={styles.label}>E-mail</Text>
-      <TextInput
-        autoCapitalize="none"
-        keyboardType="email-address"
-        onChangeText={setEmail}
-        placeholder="voce@email.com"
-        placeholderTextColor={colors.muted}
-        style={styles.input}
-        value={email}
-      />
-      <Text style={styles.label}>Senha</Text>
-      <TextInput
-        onChangeText={setPassword}
-        placeholder="Sua senha"
-        placeholderTextColor={colors.muted}
-        secureTextEntry
-        style={styles.input}
-        value={password}
-      />
-      <Pressable onPress={handleSubmit} style={styles.submit}>
-        <Text style={styles.submitText}>Entrar</Text>
-      </Pressable>
-      <Pressable
-        onPress={() =>
-          Alert.alert(
-            'Google ainda não conectado',
-            'A autenticação será configurada quando os dados do provedor estiverem disponíveis.',
-          )
-        }
-        style={styles.googleButton}
+      <ScrollView
+        contentContainerStyle={styles.formContent}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.googleText}>Continuar com Google</Text>
-      </Pressable>
-      <Text style={styles.footnote}>
-        {DEMO_MODE
-          ? 'Contas demonstrativas: usu@gmail.com (cliente) · adm@gmail.com (vendedor). Informe qualquer senha não vazia.'
-          : 'A autenticação será habilitada quando a integração com o backend estiver disponível.'}
-      </Text>
+        <Image
+          accessibilityLabel="Logo OMA"
+          resizeMode="contain"
+          source={require('../assets/oma-logo.png')}
+          style={styles.brandLogo}
+        />
+        <Text style={styles.title}>Que bom te ver.</Text>
+        <Text style={styles.subtitle}>Entre para acompanhar teus pedidos e continuar teu mate.</Text>
+
+        <Text style={styles.label}>E-mail</Text>
+        <TextInput
+          autoCapitalize="none"
+          keyboardType="email-address"
+          onChangeText={setEmail}
+          placeholder="voce@email.com"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={email}
+        />
+        <Text style={styles.label}>Senha</Text>
+        <TextInput
+          onChangeText={setPassword}
+          placeholder="Sua senha"
+          placeholderTextColor={colors.muted}
+          secureTextEntry
+          style={styles.input}
+          value={password}
+        />
+        <Pressable onPress={handleSubmit} style={styles.submit}>
+          <Text style={styles.submitText}>Entrar</Text>
+        </Pressable>
+        <Text style={styles.footnote}>
+          {DEMO_MODE
+            ? 'Contas demonstrativas: usu@gmail.com (cliente) · adm@gmail.com (vendedor). Informe qualquer senha não vazia.'
+            : 'A autenticação será habilitada quando a integração com o backend estiver disponível.'}
+        </Text>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: 25, justifyContent: 'center' },
+  screen: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: 25 },
+  formContent: { flexGrow: 1, justifyContent: 'center', paddingTop: 32, paddingBottom: 24 },
   back: {
     position: 'absolute',
     top: 54,
@@ -97,8 +97,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  brand: { color: colors.forest, fontSize: 39, fontWeight: '900', letterSpacing: -2, textAlign: 'center' },
-  brandDot: { color: colors.clay },
+  brandLogo: {
+    width: 174,
+    height: 174,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
   title: { color: colors.ink, fontSize: 26, fontWeight: '800', textAlign: 'center', marginTop: 20 },
   subtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 29 },
   label: { color: colors.ink, fontSize: 12, fontWeight: '700', marginBottom: 7 },
@@ -121,16 +125,5 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   submitText: { color: colors.white, fontSize: 14, fontWeight: '800' },
-  googleButton: {
-    height: 49,
-    borderRadius: 15,
-    borderColor: colors.border,
-    borderWidth: 1,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  googleText: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   footnote: { color: colors.muted, textAlign: 'center', fontSize: 10, lineHeight: 16, marginTop: 22 },
 });

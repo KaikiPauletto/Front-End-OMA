@@ -168,6 +168,7 @@ const styles = StyleSheet.create({
 export function RootNavigator() {
   const { user } = useAuth();
   const isCustomer = user?.role === 'CLIENTE';
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
 
   return (
     <Stack.Navigator
@@ -183,6 +184,7 @@ export function RootNavigator() {
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="AboutOMA" component={AboutOMAScreen} />
+          {isAdministrator ? <Stack.Screen name="Categorias" component={CategoriesScreen} /> : null}
           <Stack.Screen name="Subcategorias" component={SubcategoriesScreen} />
           <Stack.Screen name="Produtos" component={ProductsScreen} />
           <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />

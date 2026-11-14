@@ -1,14 +1,18 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
 export function WelcomeScreen({ navigation }) {
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.logoContainer}>
-          <Text style={styles.brand}>oma<Text style={styles.brandDot}>.</Text></Text>
-          <Ionicons name="leaf" size={23} color={colors.clay} />
+          <Image
+            accessibilityLabel="Logo OMA"
+            resizeMode="contain"
+            source={require('../assets/oma-logo.png')}
+            style={styles.logoImage}
+          />
         </View>
 
         <View style={styles.heading}>
@@ -33,7 +37,7 @@ export function WelcomeScreen({ navigation }) {
             <Text style={styles.registerButtonText}>CRIAR CONTA</Text>
           </Pressable>
         </View>
-      </View>
+      </ScrollView>
 
       <Text style={styles.demoNotice}>Aplicativo em modo de demonstração</Text>
     </View>
@@ -48,32 +52,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
+    flexGrow: 1,
     width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   logoContainer: {
-    width: 112,
-    height: 112,
-    borderRadius: 24,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: 294,
+    height: 294,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 82,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 3,
+    marginBottom: 30,
   },
-  brand: {
-    color: colors.forest,
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -2,
-  },
-  brandDot: { color: colors.clay },
+  logoImage: { width: '100%', height: '100%' },
   heading: {
     alignItems: 'center',
     marginBottom: 58,
