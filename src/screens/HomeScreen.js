@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { AppButton } from '../components/AppButton';
 import { AppHeader } from '../components/AppHeader';
 import { EditorialSection } from '../components/EditorialSection';
@@ -49,6 +50,7 @@ export function HomeScreen({ navigation }) {
   const [categoryError, setCategoryError] = useState('');
   const [productError, setProductError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const hasBeenFocused = useRef(false);
   const { width: screenWidth } = useWindowDimensions();
   const heroHeight = Math.min(400, Math.max(300, (screenWidth - 40) * (400 / 350)));
   const { user } = useAuth();
@@ -57,6 +59,14 @@ export function HomeScreen({ navigation }) {
   for (let index = 0; index < products.length; index += 2) {
     productRows.push(products.slice(index, index + 2));
   }
+
+  useFocusEffect(useCallback(() => {
+    if (hasBeenFocused.current) {
+      setReloadKey((key) => key + 1);
+    } else {
+      hasBeenFocused.current = true;
+    }
+  }, []));
 
   useEffect(() => {
     let active = true;
@@ -252,8 +262,12 @@ export function HomeScreen({ navigation }) {
                     key={product.id}
                     product={product}
                     layout="grid"
-                    showAction={false}
+                    showAction={user?.role === 'ADMINISTRADOR'}
                     onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
+                    onEdit={() => navigation.navigate('ProductDetails', {
+                      productId: product.id,
+                      editOnOpen: true,
+                    })}
                   />
                 ))}
                 {row.length === 1 ? <View style={styles.gridPlaceholder} /> : null}

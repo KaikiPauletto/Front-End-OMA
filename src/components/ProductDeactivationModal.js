@@ -5,6 +5,7 @@ import { colors } from '../theme/colors';
 
 export function ProductDeactivationModal({ visible, onCancel, onConfirm }) {
   const [error, setError] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -12,16 +13,37 @@ export function ProductDeactivationModal({ visible, onCancel, onConfirm }) {
     }
   }, [visible]);
 
-  function handleConfirm() {
-    if (!onConfirm()) {
-      setError('Não foi possível desativar o produto. Tente novamente.');
+  async function handleConfirm() {
+    if (isConfirming) {
+      return;
+    }
+
+    setIsConfirming(true);
+    setError('');
+    try {
+      const success = await onConfirm();
+      if (!success) {
+        setError('Não foi possível desativar o produto. Tente novamente.');
+      }
+    } catch (confirmError) {
+      setError(
+        confirmError instanceof Error
+          ? confirmError.message
+          : 'Não foi possível desativar o produto. Tente novamente.',
+      );
+    } finally {
+      setIsConfirming(false);
     }
   }
 
   return (
     <Modal
       animationType="fade"
-      onRequestClose={onCancel}
+      onRequestClose={() => {
+        if (!isConfirming) {
+          onCancel();
+        }
+      }}
       transparent
       visible={visible}
     >
@@ -37,13 +59,15 @@ export function ProductDeactivationModal({ visible, onCancel, onConfirm }) {
               title="Cancelar"
               variant="outline"
               onPress={onCancel}
+              disabled={isConfirming}
               style={styles.action}
               textStyle={styles.buttonText}
             />
             <AppButton
-              title="Sim, desativar"
+              title={isConfirming ? 'Desativando...' : 'Sim, desativar'}
               variant="danger"
               onPress={handleConfirm}
+              disabled={isConfirming}
               style={styles.action}
               textStyle={styles.buttonText}
             />

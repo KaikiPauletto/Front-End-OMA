@@ -5,9 +5,9 @@ import { colors } from '../theme/colors';
 export function ProductAdminActions({
   active,
   error,
+  isUpdating = false,
   onEdit,
   onToggleActive,
-  showToggle = true,
 }) {
   const actionTextStyle = { fontSize: 10, fontWeight: '800', textTransform: 'none' };
 
@@ -19,19 +19,21 @@ export function ProductAdminActions({
           title="Editar produto"
           icon="create-outline"
           onPress={onEdit}
+          disabled={isUpdating}
           style={styles.action}
           textStyle={actionTextStyle}
         />
-        {showToggle ? (
-          <AppButton
-            title={active ? 'Desativar produto' : 'Ativar produto'}
-            icon={active ? 'ban-outline' : 'checkmark-circle-outline'}
-            onPress={onToggleActive}
-            variant={active ? 'danger' : 'primary'}
-            style={styles.action}
-            textStyle={actionTextStyle}
-          />
-        ) : null}
+        <AppButton
+          title={isUpdating
+            ? 'Atualizando...'
+            : active ? 'Desativar produto' : 'Ativar produto'}
+          icon={active ? 'ban-outline' : 'checkmark-circle-outline'}
+          onPress={onToggleActive}
+          disabled={isUpdating}
+          variant={active ? 'danger' : 'primary'}
+          style={styles.action}
+          textStyle={actionTextStyle}
+        />
       </View>
     </View>
   );

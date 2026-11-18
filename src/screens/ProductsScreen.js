@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,8 +11,10 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { AppHeader } from '../components/AppHeader';
 import { ProductCard } from '../components/ProductCard';
+import { useAuth } from '../contexts/AuthContext';
 import { listCategories, listProducts, listSubcategories, productSortOptions } from '../services/productService';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
@@ -20,6 +22,8 @@ import { typography } from '../theme/typography';
 const PAGE_SIZE = 10;
 
 export function ProductsScreen({ navigation, route }) {
+  const { user } = useAuth();
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
   const initialParams = route.params ?? {};
   const [search, setSearch] = useState(initialParams.searchQuery ?? '');
   const [submittedSearch, setSubmittedSearch] = useState(initialParams.searchQuery ?? '');
@@ -45,6 +49,7 @@ export function ProductsScreen({ navigation, route }) {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
+  const hasBeenFocused = useRef(false);
   const queryVersion = useRef(0);
   const loadMoreLock = useRef(false);
 
@@ -116,6 +121,14 @@ export function ProductsScreen({ navigation, route }) {
   const selectedCategory = categories.find((category) => category.id === String(categoryId));
   const selectedSubcategory = subcategories.find((subcategory) => subcategory.id === String(subcategoryId));
   const selectedSort = productSortOptions.find((option) => option.id === sortBy) ?? productSortOptions[0];
+
+  useFocusEffect(useCallback(() => {
+    if (hasBeenFocused.current) {
+      setReloadKey((key) => key + 1);
+    } else {
+      hasBeenFocused.current = true;
+    }
+  }, []));
 
   useEffect(() => {
     const version = queryVersion.current + 1;
@@ -341,8 +354,12 @@ export function ProductsScreen({ navigation, route }) {
           <ProductCard
             product={item}
             layout="grid"
-            showAction={false}
+            showAction={isAdministrator}
             onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+            onEdit={() => navigation.navigate('ProductDetails', {
+              productId: item.id,
+              editOnOpen: true,
+            })}
           />
         )}
       />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +31,7 @@ import {
 import { getCategoryLabel } from '../data/categories';
 import {
   getProductById,
+  setProductActive as setRemoteProductActive,
   updateProduct as updateRemoteProduct,
 } from '../services/productService';
 import { colors } from '../theme/colors';
@@ -60,6 +61,8 @@ export function ProductDetailsScreen({ navigation, route }) {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [deactivationModalVisible, setDeactivationModalVisible] = useState(false);
   const [productStatusError, setProductStatusError] = useState('');
+  const [isUpdatingProductStatus, setIsUpdatingProductStatus] = useState(false);
+  const productStatusLock = useRef(false);
   const { addItem, itemCount } = useCart();
   const insets = useSafeAreaInsets();
 
@@ -211,21 +214,56 @@ export function ProductDetailsScreen({ navigation, route }) {
     setCartConfirmationVisible(false);
   }
 
-  function updateProductStatus(active) {
-    const updateProduct = isSellerProduct ? updateSellerProduct : updateCatalogProduct;
-    if (!updateProduct(product.id, { active })) {
-      setProductStatusError('Não foi possível atualizar o produto. Tente novamente.');
+  async function updateProductStatus(active) {
+    if (productStatusLock.current) {
       return false;
     }
 
+    productStatusLock.current = true;
+    setIsUpdatingProductStatus(true);
     setProductStatusError('');
-    setCartConfirmationVisible(false);
-    return true;
+
+    try {
+      if (isRemoteProduct) {
+        const updatedProduct = await setRemoteProductActive(product.id, active, token);
+        setApiProduct((currentProduct) => (
+          currentProduct?.id === String(product.id)
+            ? { ...currentProduct, active: updatedProduct.active }
+            : currentProduct
+        ));
+      } else {
+        const updateProduct = isSellerProduct ? updateSellerProduct : updateCatalogProduct;
+        if (!updateProduct(product.id, { active })) {
+          setProductStatusError('Não foi possível atualizar o produto. Tente novamente.');
+          return false;
+        }
+      }
+
+      setCartConfirmationVisible(false);
+      return true;
+    } catch (error) {
+      if (isRemoteProduct) {
+        throw error;
+      }
+      setProductStatusError(
+        error instanceof Error ? error.message : 'Não foi possível atualizar o produto.',
+      );
+      return false;
+    } finally {
+      productStatusLock.current = false;
+      setIsUpdatingProductStatus(false);
+    }
   }
 
-  function toggleProductStatus() {
+  async function toggleProductStatus() {
     if (product.active === false) {
-      updateProductStatus(true);
+      try {
+        await updateProductStatus(true);
+      } catch (error) {
+        setProductStatusError(
+          error instanceof Error ? error.message : 'Não foi possível ativar o produto.',
+        );
+      }
       return;
     }
 
@@ -233,8 +271,8 @@ export function ProductDetailsScreen({ navigation, route }) {
     setDeactivationModalVisible(true);
   }
 
-  function confirmProductDeactivation() {
-    if (!updateProductStatus(false)) {
+  async function confirmProductDeactivation() {
+    if (!await updateProductStatus(false)) {
       return false;
     }
 
@@ -322,8 +360,14 @@ export function ProductDetailsScreen({ navigation, route }) {
 
           {isRemoteProduct ? (
             <View style={styles.availability}>
-              <Ionicons name="checkmark-circle" size={17} color={colors.forestLight} />
-              <Text style={styles.availabilityText}>Produto ativo no catálogo</Text>
+              <Ionicons
+                name={product.active === false ? 'close-circle' : 'checkmark-circle'}
+                size={17}
+                color={product.active === false ? colors.danger : colors.forestLight}
+              />
+              <Text style={styles.availabilityText}>
+                {product.active === false ? 'Produto desativado' : 'Produto ativo no catálogo'}
+              </Text>
             </View>
           ) : (
             <View style={styles.availability}>
@@ -405,9 +449,9 @@ export function ProductDetailsScreen({ navigation, route }) {
           <ProductAdminActions
             active={product.active !== false}
             error={productStatusError}
+            isUpdating={isUpdatingProductStatus}
             onEdit={() => setEditModalVisible(true)}
             onToggleActive={toggleProductStatus}
-            showToggle={!isRemoteProduct}
           />
         </View>
       ) : !isRemoteProduct && !cartConfirmationVisible ? (
@@ -431,18 +475,16 @@ export function ProductDetailsScreen({ navigation, route }) {
         />
       ) : null}
       {isAdministrator ? (
-        <ProductEditModal
-          visible={editModalVisible}
-          product={product}
-          price={isRemoteProduct ? (product.originalPrice ?? unitPrice) : unitPrice}
-          currency={product.currency || 'BRL'}
-          remote={isRemoteProduct}
-          onClose={() => setEditModalVisible(false)}
-          onSave={handleSaveEdits}
-        />
-      ) : null}
-      {!isRemoteProduct ? (
         <>
+          <ProductEditModal
+            visible={editModalVisible}
+            product={product}
+            price={isRemoteProduct ? (product.originalPrice ?? unitPrice) : unitPrice}
+            currency={product.currency || 'BRL'}
+            remote={isRemoteProduct}
+            onClose={() => setEditModalVisible(false)}
+            onSave={handleSaveEdits}
+          />
           <ProductDeactivationModal
             visible={deactivationModalVisible}
             onCancel={() => setDeactivationModalVisible(false)}

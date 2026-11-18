@@ -123,6 +123,43 @@ export async function updateProduct(productId, product, token) {
   return response.data;
 }
 
+export async function setProductActive(productId, active, token) {
+  if (!hasIdentifier(productId)) {
+    throw new Error('O identificador do produto é inválido.');
+  }
+  if (typeof active !== 'boolean') {
+    throw new Error('O status do produto deve ser ativo ou inativo.');
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const response = await apiRequest(
+    `/ws/products/${encodeURIComponent(productId)}/status`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ active }),
+    },
+    { includeStatus: true },
+  );
+
+  if (
+    response.status !== 200 ||
+    !isRecord(response.data) ||
+    !hasIdentifier(response.data.id) ||
+    String(response.data.id) !== String(productId) ||
+    response.data.active !== active
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return response.data;
+}
+
 function mapNamedResource(resource) {
   if (
     !isRecord(resource) ||
