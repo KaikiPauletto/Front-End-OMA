@@ -60,6 +60,35 @@ export async function getProductById(productId) {
   return mapProduct(response);
 }
 
+export async function createProduct(product, token) {
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const response = await apiRequest(
+    '/ws/products',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(product),
+    },
+    { includeStatus: true },
+  );
+
+  if (
+    response.status !== 201 ||
+    !isRecord(response.data) ||
+    !hasIdentifier(response.data.id)
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return response.data;
+}
+
 function mapNamedResource(resource) {
   if (
     !isRecord(resource) ||

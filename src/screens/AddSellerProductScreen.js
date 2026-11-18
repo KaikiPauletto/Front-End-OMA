@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Image,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -13,15 +12,32 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { useSellerProducts } from '../contexts/SellerProductsContext';
-import { categories } from '../data/categories';
+import { useAuth } from '../contexts/AuthContext';
+import { ApiError } from '../services/apiClient';
+import {
+  createProduct,
+  listCategories,
+  listSubcategories,
+} from '../services/productService';
 import { colors } from '../theme/colors';
 
 const priceInputFormatter = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+
+const productTypes = [
+  {
+    value: 'SINGLE_UNIT',
+    label: 'Unitário',
+    description: 'Uma unidade por produto.',
+  },
+  {
+    value: 'MULTI_UNIT',
+    label: 'Quantitativo',
+    description: 'Produto vendido em várias unidades.',
+  },
+];
 
 function formatPriceInput(value) {
   const digits = value.replace(/\D/g, '');
@@ -49,82 +65,138 @@ function parsePrice(value) {
   return Number(amount);
 }
 
+function getErrorMessage(error) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return 'Sua sessão expirou. Entre novamente como administrador.';
+    }
+    if (error.status === 403) {
+      return 'Sua conta não tem permissão para cadastrar produtos.';
+    }
+    return error.message;
+  }
+  return error instanceof Error
+    ? error.message
+    : 'Não foi possível concluir o cadastro. Tente novamente.';
+}
+
 export function AddSellerProductScreen({ navigation }) {
-  const { addProduct } = useSellerProducts();
+  const { token } = useAuth();
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [price, setPrice] = useState('');
-  const [quantity, setQuantity] = useState('');
   const [model, setModel] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [description, setDescription] = useState('');
-  const [image, setImage] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [productType, setProductType] = useState('');
   const [subcategoryPickerVisible, setSubcategoryPickerVisible] = useState(false);
+  const [categoryGroups, setCategoryGroups] = useState([]);
+  const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(true);
+  const [subcategoryLoadError, setSubcategoryLoadError] = useState('');
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
+  const [submitError, setSubmitError] = useState('');
+  const [successProductId, setSuccessProductId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLock = useRef(false);
 
-  async function handleSelectImage() {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          'Permissão necessária',
-          'Permita o acesso às fotos para anexar uma imagem ao produto.',
-        );
-        return;
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSubcategories() {
+      setIsLoadingSubcategories(true);
+      setSubcategoryLoadError('');
+
+      try {
+        const categories = await listCategories();
+        const groups = await Promise.all(categories.map(async (category) => {
+          const subcategories = await listSubcategories(category.id);
+          return {
+            ...category,
+            subcategories: subcategories.map((subcategory) => ({
+              ...subcategory,
+              categoryId: category.id,
+              categoryName: category.name,
+            })),
+          };
+        }));
+
+        if (isActive) {
+          setCategoryGroups(groups);
+          setSelectedSubcategory(null);
+        }
+      } catch (error) {
+        if (isActive) {
+          setSubcategoryLoadError(getErrorMessage(error));
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingSubcategories(false);
+        }
       }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setImage({ uri: result.assets[0].uri });
-      }
-    } catch (error) {
-      Alert.alert(
-        'Não foi possível selecionar a foto',
-        error instanceof Error ? error.message : 'Tente novamente.',
-      );
     }
+
+    loadSubcategories();
+    return () => {
+      isActive = false;
+    };
+  }, [catalogReloadKey]);
+
+  function handleFieldChange(setter) {
+    return (value) => {
+      setter(value);
+      setSubmitError('');
+      setSuccessProductId(null);
+    };
   }
 
-  function handleSubmit() {
-    const parsedQuantity = Number(quantity);
+  async function handleSubmit() {
+    if (submitLock.current) {
+      return;
+    }
+
     const parsedPrice = parsePrice(price);
+    const subcategoryId = Number(selectedSubcategory?.id);
     if (
-      !image ||
       !name.trim() ||
       !brand.trim() ||
+      !model.trim() ||
+      !description.trim() ||
       !Number.isFinite(parsedPrice) ||
       parsedPrice <= 0 ||
-      !quantity.trim() ||
-      !Number.isInteger(parsedQuantity) ||
-      parsedQuantity < 0 ||
-      !model.trim() ||
-      !selectedSubcategory ||
-      !description.trim()
+      !Number.isSafeInteger(subcategoryId) ||
+      subcategoryId <= 0 ||
+      !productTypes.some((type) => type.value === productType)
     ) {
-      Alert.alert(
-        'Dados incompletos',
-        'Anexe uma foto e preencha nome, marca, preço, quantidade, modelo, subcategoria e informações do produto.',
+      setSubmitError(
+        'Preencha nome, marca, modelo, descrição, preço válido, subcategoria e tipo do produto.',
       );
       return;
     }
 
-    addProduct({
-      name: name.trim(),
-      brand: brand.trim(),
-      price: parsedPrice,
-      quantity: parsedQuantity,
-      model: model.trim(),
-      category: selectedSubcategory.categoryId,
-      subcategory: selectedSubcategory.id,
-      description: description.trim(),
-      image,
-    });
-    navigation.navigate('Vendas');
+    submitLock.current = true;
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      const createdProduct = await createProduct({
+        name: name.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        description: description.trim(),
+        currency: 'BRL',
+        price: parsedPrice,
+        image: imageUrl.trim() || null,
+        subcategoryId,
+        productType,
+      }, token);
+      setSuccessProductId(String(createdProduct.id));
+    } catch (error) {
+      setSubmitError(getErrorMessage(error));
+    } finally {
+      submitLock.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -148,25 +220,9 @@ export function AddSellerProductScreen({ navigation }) {
         contentContainerStyle={styles.form}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.label}>Foto do produto</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleSelectImage}
-          style={styles.imagePicker}
-        >
-          {image ? (
-            <Image source={image} style={styles.preview} resizeMode="cover" />
-          ) : (
-            <>
-              <Ionicons name="camera-outline" size={28} color={colors.forest} />
-              <Text style={styles.imagePickerText}>Anexar foto</Text>
-            </>
-          )}
-        </Pressable>
-
         <Text style={styles.label}>Nome</Text>
         <TextInput
-          onChangeText={setName}
+          onChangeText={handleFieldChange(setName)}
           placeholder="Nome do produto"
           placeholderTextColor={colors.muted}
           style={styles.input}
@@ -175,11 +231,20 @@ export function AddSellerProductScreen({ navigation }) {
 
         <Text style={styles.label}>Marca</Text>
         <TextInput
-          onChangeText={setBrand}
+          onChangeText={handleFieldChange(setBrand)}
           placeholder="Marca do produto"
           placeholderTextColor={colors.muted}
           style={styles.input}
           value={brand}
+        />
+
+        <Text style={styles.label}>Modelo</Text>
+        <TextInput
+          onChangeText={handleFieldChange(setModel)}
+          placeholder="Modelo do produto"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={model}
         />
 
         <Text style={styles.label}>Preço</Text>
@@ -187,7 +252,7 @@ export function AddSellerProductScreen({ navigation }) {
           <Text style={styles.currencyPrefix}>R$</Text>
           <TextInput
             keyboardType="number-pad"
-            onChangeText={(value) => setPrice(formatPriceInput(value))}
+            onChangeText={(value) => handleFieldChange(setPrice)(formatPriceInput(value))}
             placeholder="0,00"
             placeholderTextColor={colors.muted}
             style={styles.priceInput}
@@ -195,58 +260,125 @@ export function AddSellerProductScreen({ navigation }) {
           />
         </View>
 
-        <Text style={styles.label}>Quantidade</Text>
-        <TextInput
-          keyboardType="number-pad"
-          onChangeText={(value) => setQuantity(value.replace(/[^0-9]/g, ''))}
-          placeholder="Quantidade disponível"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={quantity}
-        />
-
-        <Text style={styles.label}>Modelo</Text>
-        <TextInput
-          onChangeText={setModel}
-          placeholder="Modelo do produto"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={model}
-        />
-
         <Text style={styles.label}>Subcategoria</Text>
         <Pressable
           accessibilityRole="button"
+          disabled={isLoadingSubcategories || categoryGroups.length === 0}
           onPress={() => setSubcategoryPickerVisible(true)}
           style={styles.categoryButton}
         >
           <Text style={selectedSubcategory ? styles.categorySelected : styles.categoryPlaceholder}>
-            {selectedSubcategory
-              ? `${selectedSubcategory.name} (${selectedSubcategory.categoryName})`
-              : 'Selecione uma subcategoria'}
+            {isLoadingSubcategories
+              ? 'Carregando subcategorias...'
+              : selectedSubcategory
+                ? `${selectedSubcategory.name} (${selectedSubcategory.categoryName})`
+                : 'Selecione uma subcategoria'}
           </Text>
-          <Ionicons name="chevron-down" size={18} color={colors.muted} />
+          {isLoadingSubcategories
+            ? <ActivityIndicator size="small" color={colors.forest} />
+            : <Ionicons name="chevron-down" size={18} color={colors.muted} />}
         </Pressable>
+        {subcategoryLoadError ? (
+          <View style={styles.loadErrorContainer}>
+            <Text style={styles.errorText}>{subcategoryLoadError}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setCatalogReloadKey((key) => key + 1)}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryText}>Tentar novamente</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <Text style={styles.label}>Tipo do produto</Text>
+        <View style={styles.productTypeOptions}>
+          {productTypes.map((type) => {
+            const isSelected = productType === type.value;
+            return (
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                key={type.value}
+                onPress={() => handleFieldChange(setProductType)(type.value)}
+                style={[
+                  styles.productTypeOption,
+                  isSelected && styles.productTypeOptionSelected,
+                ]}
+              >
+                <View style={styles.productTypeHeading}>
+                  <Text style={isSelected ? styles.productTypeSelectedLabel : styles.productTypeLabel}>
+                    {type.label}
+                  </Text>
+                  {isSelected ? (
+                    <Ionicons name="checkmark-circle" size={18} color={colors.forest} />
+                  ) : null}
+                </View>
+                <Text style={styles.productTypeDescription}>{type.description}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>URL da imagem (opcional)</Text>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          onChangeText={handleFieldChange(setImageUrl)}
+          placeholder="https://..."
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={imageUrl}
+        />
 
         <Text style={styles.label}>Informações do produto</Text>
         <TextInput
           multiline
-          onChangeText={setDescription}
+          onChangeText={handleFieldChange(setDescription)}
           placeholder="Descreva os detalhes do produto"
           placeholderTextColor={colors.muted}
           style={[styles.input, styles.descriptionInput]}
           textAlignVertical="top"
           value={description}
         />
+
+        {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
+        {successProductId ? (
+          <View style={styles.successContainer}>
+            <Text style={styles.successText}>
+              Produto criado no catálogo. O estoque inicial não foi integrado nesta etapa.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('ProductDetails', { productId: successProductId })}
+              style={styles.viewProductButton}
+            >
+              <Text style={styles.viewProductText}>Visualizar produto</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.forest} />
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: isSubmitting || Boolean(successProductId) }}
+          disabled={isSubmitting || Boolean(successProductId)}
           onPress={handleSubmit}
-          style={styles.submit}
+          style={[
+            styles.submit,
+            (isSubmitting || successProductId) && styles.submitDisabled,
+          ]}
         >
-          <Text style={styles.submitText}>Salvar produto</Text>
+          {isSubmitting ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitText}>
+              {successProductId ? 'Produto criado' : 'Salvar produto'}
+            </Text>
+          )}
         </Pressable>
       </View>
 
@@ -269,31 +401,33 @@ export function AddSellerProductScreen({ navigation }) {
               </Pressable>
             </View>
             <ScrollView>
-              {categories.map((categoryItem) => (
-                <View key={categoryItem.id}>
-                  <Text style={styles.categoryGroupTitle}>{categoryItem.name}</Text>
-                  {categoryItem.subcategories.map((subcategory) => (
+              {categoryGroups.map((category) => (
+                <View key={category.id}>
+                  <Text style={styles.categoryGroupTitle}>{category.name}</Text>
+                  {category.subcategories.map((subcategory) => (
                     <Pressable
+                      accessibilityRole="button"
                       key={subcategory.id}
                       onPress={() => {
-                        setSelectedSubcategory({
-                          ...subcategory,
-                          categoryId: categoryItem.id,
-                          categoryName: categoryItem.name,
-                        });
+                        handleFieldChange(setSelectedSubcategory)(subcategory);
                         setSubcategoryPickerVisible(false);
                       }}
                       style={styles.categoryOption}
                     >
                       <Text style={styles.categoryOptionText}>{subcategory.name}</Text>
                       {selectedSubcategory?.id === subcategory.id &&
-                      selectedSubcategory.categoryId === categoryItem.id ? (
+                      selectedSubcategory.categoryId === category.id ? (
                         <Ionicons name="checkmark" size={20} color={colors.forest} />
                       ) : null}
                     </Pressable>
                   ))}
                 </View>
               ))}
+              {!isLoadingSubcategories &&
+              !subcategoryLoadError &&
+              categoryGroups.every((category) => category.subcategories.length === 0) ? (
+                <Text style={styles.emptySubcategories}>Nenhuma subcategoria disponível.</Text>
+              ) : null}
             </ScrollView>
           </View>
         </View>
@@ -317,20 +451,6 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 21, fontWeight: '800' },
   form: { paddingHorizontal: 22, paddingTop: 18, paddingBottom: 24 },
   label: { color: colors.ink, fontSize: 12, fontWeight: '700', marginBottom: 7, marginTop: 4 },
-  imagePicker: {
-    height: 148,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.forestLight,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 17,
-    overflow: 'hidden',
-  },
-  imagePickerText: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 7 },
-  preview: { width: '100%', height: '100%' },
   input: {
     minHeight: 48,
     borderRadius: 14,
@@ -368,7 +488,43 @@ const styles = StyleSheet.create({
   },
   categoryPlaceholder: { color: colors.muted, fontSize: 13 },
   categorySelected: { color: colors.ink, fontSize: 13, fontWeight: '600' },
+  productTypeOptions: { gap: 8, marginBottom: 15 },
+  productTypeOption: {
+    padding: 13,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+  },
+  productTypeOptionSelected: { borderColor: colors.forest, backgroundColor: colors.sage },
+  productTypeHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  productTypeLabel: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  productTypeSelectedLabel: { color: colors.forest, fontSize: 13, fontWeight: '800' },
+  productTypeDescription: { color: colors.muted, fontSize: 11, marginTop: 4 },
   descriptionInput: { minHeight: 118, paddingTop: 13 },
+  loadErrorContainer: { marginTop: -8, marginBottom: 12 },
+  errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
+  retryButton: { alignSelf: 'flex-start', marginBottom: 14 },
+  retryText: { color: colors.forest, fontSize: 12, fontWeight: '800' },
+  successContainer: {
+    borderRadius: 14,
+    backgroundColor: colors.sage,
+    padding: 13,
+    marginBottom: 8,
+  },
+  successText: { color: colors.forest, fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  viewProductButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  viewProductText: { color: colors.forest, fontSize: 12, fontWeight: '800' },
   footer: {
     paddingHorizontal: 22,
     paddingTop: 12,
@@ -384,6 +540,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  submitDisabled: { opacity: 0.7 },
   submitText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   modalBackdrop: {
     flex: 1,
@@ -422,4 +579,5 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   categoryOptionText: { color: colors.ink, fontSize: 14 },
+  emptySubcategories: { color: colors.muted, fontSize: 13, paddingVertical: 16 },
 });
