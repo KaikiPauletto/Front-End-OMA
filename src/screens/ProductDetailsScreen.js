@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -28,6 +29,7 @@ import {
   getProductStock,
 } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
+import { getProductById } from '../services/productService';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
@@ -36,9 +38,16 @@ export function ProductDetailsScreen({ navigation, route }) {
   const isAdministrator = user?.role === 'ADMINISTRADOR';
   const { products: catalogProducts, updateProduct: updateCatalogProduct } = useProductCatalog();
   const { products: sellerProducts, updateProduct: updateSellerProduct } = useSellerProducts();
-  const catalogProduct = catalogProducts.find((item) => item.id === route.params?.productId);
-  const sellerProduct = sellerProducts.find((item) => item.id === route.params?.productId);
-  const product = catalogProduct ?? sellerProduct;
+  const productId = route.params?.productId;
+  const catalogProduct = catalogProducts.find((item) => item.id === productId);
+  const sellerProduct = sellerProducts.find((item) => item.id === productId);
+  const [apiProduct, setApiProduct] = useState(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const remoteProduct = apiProduct?.id === String(productId) ? apiProduct : null;
+  const product = catalogProduct ?? sellerProduct ?? remoteProduct;
+  const isRemoteProduct = !catalogProduct && !sellerProduct;
   const isSellerProduct = !catalogProduct && Boolean(sellerProduct);
   const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
   const [quantity, setQuantity] = useState(1);
@@ -50,12 +59,49 @@ export function ProductDetailsScreen({ navigation, route }) {
   const [productStatusError, setProductStatusError] = useState('');
   const { addItem, itemCount } = useCart();
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    let active = true;
+    if (catalogProduct || sellerProduct || productId === undefined || productId === null) {
+      setApiProduct(null);
+      setApiError('');
+      setApiLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setApiProduct(null);
+    setApiError('');
+    setApiLoading(true);
+    getProductById(productId)
+      .then((result) => {
+        if (active) {
+          setApiProduct(result);
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setApiError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o produto.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setApiLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [productId, catalogProduct?.id, sellerProduct?.id, reloadKey]);
+
   const variant = product?.variants?.find((item) => item.id === variantId)
     ?? product?.variants?.[0]
     ?? null;
   const availableProducts = useMemo(
-    () => getAvailableProducts(catalogProducts),
-    [catalogProducts],
+    () => (isRemoteProduct ? [] : getAvailableProducts(catalogProducts)),
+    [catalogProducts, isRemoteProduct],
   );
   const similarProducts = useMemo(
     () => availableProducts
@@ -82,6 +128,35 @@ export function ProductDetailsScreen({ navigation, route }) {
       navigation.setParams({ editOnOpen: false });
     }
   }, [isAdministrator, navigation, route.params?.editOnOpen]);
+
+  if (
+    isRemoteProduct &&
+    productId !== undefined &&
+    productId !== null &&
+    !remoteProduct
+  ) {
+    return (
+      <View style={styles.notFound}>
+        {apiLoading || !apiError ? (
+          <>
+            <ActivityIndicator color={colors.forest} />
+            <Text style={styles.stateText}>Carregando produto...</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.notFoundText}>Não foi possível carregar o produto.</Text>
+            <Text style={styles.stateText}>{apiError}</Text>
+            <Pressable onPress={() => setReloadKey((key) => key + 1)}>
+              <Text style={styles.backLink}>Tentar novamente</Text>
+            </Pressable>
+          </>
+        )}
+        <Pressable onPress={() => navigation.goBack()}>
+          <Text style={styles.backLink}>Voltar</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (!product) {
     return (
@@ -180,7 +255,7 @@ export function ProductDetailsScreen({ navigation, route }) {
   return (
     <View style={styles.screen}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={[styles.artwork, { backgroundColor: product.backdrop }]}>
+        <View style={[styles.artwork, { backgroundColor: product.backdrop || colors.surfaceMuted }]}>
           <ProductImage
             source={product.image}
             style={styles.productImage}
@@ -198,8 +273,15 @@ export function ProductDetailsScreen({ navigation, route }) {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.category}>{getCategoryLabel(product.category).toUpperCase()}</Text>
+          <Text style={styles.category}>
+            {(product.categoryName || getCategoryLabel(product.category)).toUpperCase()}
+          </Text>
           <Text style={styles.name}>{product.name}</Text>
+          {product.brand || product.model ? (
+            <Text style={styles.metadata}>
+              {[product.brand, product.model].filter(Boolean).join(' · ')}
+            </Text>
+          ) : null}
           <Text style={styles.price}>{formatCurrency(unitPrice)}</Text>
           <Text style={styles.description}>{product.description}</Text>
 
@@ -228,27 +310,34 @@ export function ProductDetailsScreen({ navigation, route }) {
             </View>
           ) : null}
 
-          <View style={styles.availability}>
-            <Ionicons
-              name={product.active === false ? 'close-circle' : 'checkmark-circle'}
-              size={17}
-              color={product.active === false ? colors.danger : colors.forestLight}
-            />
-            <Text style={styles.availabilityText}>
-              {product.active === false
-                ? 'Produto desativado'
-                : stock > 0
-                ? (isAdministrator ? 'Produto disponível' : 'Disponível para compra')
-                : 'Indisponível no momento'}
-            </Text>
-          </View>
+          {isRemoteProduct ? (
+            <View style={styles.availability}>
+              <Ionicons name="checkmark-circle" size={17} color={colors.forestLight} />
+              <Text style={styles.availabilityText}>Produto ativo no catálogo</Text>
+            </View>
+          ) : (
+            <View style={styles.availability}>
+              <Ionicons
+                name={product.active === false ? 'close-circle' : 'checkmark-circle'}
+                size={17}
+                color={product.active === false ? colors.danger : colors.forestLight}
+              />
+              <Text style={styles.availabilityText}>
+                {product.active === false
+                  ? 'Produto desativado'
+                  : stock > 0
+                  ? (isAdministrator ? 'Produto disponível' : 'Disponível para compra')
+                  : 'Indisponível no momento'}
+              </Text>
+            </View>
+          )}
           <Text style={styles.typeDescription}>
             {product.type === 'UNITÁRIO'
               ? 'Peça individual: quantidade limitada a 1 unidade.'
               : 'Produto por quantidade. Disponibilidade sujeita à confirmação.'}
           </Text>
 
-          {!isAdministrator && product.type !== 'UNITÁRIO' && stock > 0 ? (
+          {!isRemoteProduct && !isAdministrator && product.type !== 'UNITÁRIO' && stock > 0 ? (
             <View style={styles.quantityRow}>
               <Text style={styles.optionTitle}>Quantidade</Text>
               <QuantitySelector value={quantity} maximum={maximum} onChange={setQuantity} />
@@ -256,7 +345,7 @@ export function ProductDetailsScreen({ navigation, route }) {
           ) : null}
         </View>
 
-        {similarProducts.length > 0 ? (
+        {!isRemoteProduct && similarProducts.length > 0 ? (
           <View style={styles.recommendationSection}>
             <SectionTitle title="Produtos parecidos" />
             <ScrollView
@@ -278,7 +367,7 @@ export function ProductDetailsScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {otherProducts.length > 0 ? (
+        {!isRemoteProduct && otherProducts.length > 0 ? (
           <View style={styles.recommendationSection}>
             <SectionTitle title="Você também pode gostar" />
             <ScrollView
@@ -301,7 +390,7 @@ export function ProductDetailsScreen({ navigation, route }) {
         ) : null}
       </ScrollView>
 
-      {isAdministrator ? (
+      {!isRemoteProduct && isAdministrator ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
           <ProductAdminActions
             active={product.active !== false}
@@ -310,7 +399,7 @@ export function ProductDetailsScreen({ navigation, route }) {
             onToggleActive={toggleProductStatus}
           />
         </View>
-      ) : !cartConfirmationVisible ? (
+      ) : !isRemoteProduct && !cartConfirmationVisible ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
           <View>
             <Text style={styles.totalLabel}>Valor demonstrativo</Text>
@@ -322,7 +411,7 @@ export function ProductDetailsScreen({ navigation, route }) {
           </Pressable>
         </View>
       ) : null}
-      {!isAdministrator ? (
+      {!isRemoteProduct && !isAdministrator ? (
         <CartAddedBar
           visible={cartConfirmationVisible}
           itemCount={itemCount}
@@ -330,18 +419,22 @@ export function ProductDetailsScreen({ navigation, route }) {
           onContinue={() => { setCartConfirmationVisible(false); navigation.navigate('MainTabs', { screen: 'Carrinho' }); }}
         />
       ) : null}
-      <ProductEditModal
-        visible={editModalVisible}
-        product={product}
-        price={unitPrice}
-        onClose={() => setEditModalVisible(false)}
-        onSave={handleSaveEdits}
-      />
-      <ProductDeactivationModal
-        visible={deactivationModalVisible}
-        onCancel={() => setDeactivationModalVisible(false)}
-        onConfirm={confirmProductDeactivation}
-      />
+      {!isRemoteProduct ? (
+        <>
+          <ProductEditModal
+            visible={editModalVisible}
+            product={product}
+            price={unitPrice}
+            onClose={() => setEditModalVisible(false)}
+            onSave={handleSaveEdits}
+          />
+          <ProductDeactivationModal
+            visible={deactivationModalVisible}
+            onCancel={() => setDeactivationModalVisible(false)}
+            onConfirm={confirmProductDeactivation}
+          />
+        </>
+      ) : null}
     </View>
   );
 }
@@ -374,6 +467,7 @@ const styles = StyleSheet.create({
   content: { padding: 18, paddingBottom: 30 },
   category: { color: colors.clay, fontSize: 10, fontWeight: '800', letterSpacing: 1.3 },
   name: { color: colors.ink, fontSize: 27, fontWeight: '800', marginTop: 7 },
+  metadata: { color: colors.muted, fontSize: 12, marginTop: 6 },
   price: { color: colors.forest, fontSize: 21, fontWeight: '800', marginTop: 8 },
   description: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 13 },
   options: { marginTop: 23 },
@@ -423,5 +517,6 @@ const styles = StyleSheet.create({
   addButtonText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   notFoundText: { color: colors.ink, fontSize: 16, fontWeight: '700' },
+  stateText: { color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 10, paddingHorizontal: 24 },
   backLink: { color: colors.clay, marginTop: 12, fontWeight: '700' },
 });

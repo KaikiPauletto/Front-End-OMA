@@ -252,8 +252,8 @@ export function HomeScreen({ navigation }) {
                     key={product.id}
                     product={product}
                     layout="grid"
-                    interactive={false}
                     showAction={false}
+                    onPress={() => navigation.navigate('ProductDetails', { productId: product.id })}
                   />
                 ))}
                 {row.length === 1 ? <View style={styles.gridPlaceholder} /> : null}

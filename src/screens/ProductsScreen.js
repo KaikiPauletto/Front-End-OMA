@@ -341,8 +341,8 @@ export function ProductsScreen({ navigation, route }) {
           <ProductCard
             product={item}
             layout="grid"
-            interactive={false}
             showAction={false}
+            onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
           />
         )}
       />

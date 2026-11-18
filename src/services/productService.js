@@ -36,6 +36,9 @@ function mapProduct(product) {
   ) {
     throw new InvalidCatalogResponseError();
   }
+  if (product.convertedPrice < 0) {
+    throw new Error('Não foi possível obter o preço do produto em BRL.');
+  }
 
   return {
     ...product,
@@ -48,6 +51,13 @@ function mapProduct(product) {
     price: product.convertedPrice,
     type: product.productType === 'SINGLE_UNIT' ? 'UNITÁRIO' : 'QUANTITATIVO',
   };
+}
+
+export async function getProductById(productId) {
+  const response = await apiRequest(
+    `/products/${encodeURIComponent(productId)}?targetCurrency=BRL`,
+  );
+  return mapProduct(response);
 }
 
 function mapNamedResource(resource) {
