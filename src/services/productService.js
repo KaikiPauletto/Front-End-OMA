@@ -49,6 +49,7 @@ function mapProduct(product) {
       ? { uri: product.image }
       : null,
     price: product.convertedPrice,
+    originalPrice: Number.isFinite(product.price) ? product.price : product.convertedPrice,
     type: product.productType === 'SINGLE_UNIT' ? 'UNITÁRIO' : 'QUANTITATIVO',
   };
 }
@@ -82,6 +83,39 @@ export async function createProduct(product, token) {
     response.status !== 201 ||
     !isRecord(response.data) ||
     !hasIdentifier(response.data.id)
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return response.data;
+}
+
+export async function updateProduct(productId, product, token) {
+  if (!hasIdentifier(productId)) {
+    throw new Error('O identificador do produto é inválido.');
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const response = await apiRequest(
+    `/ws/products/${encodeURIComponent(productId)}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(product),
+    },
+    { includeStatus: true },
+  );
+
+  if (
+    response.status !== 200 ||
+    !isRecord(response.data) ||
+    !hasIdentifier(response.data.id) ||
+    String(response.data.id) !== String(productId)
   ) {
     throw new InvalidCatalogResponseError();
   }

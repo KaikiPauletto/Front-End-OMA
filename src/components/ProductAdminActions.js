@@ -2,7 +2,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppButton } from './AppButton';
 import { colors } from '../theme/colors';
 
-export function ProductAdminActions({ active, error, onEdit, onToggleActive }) {
+export function ProductAdminActions({
+  active,
+  error,
+  onEdit,
+  onToggleActive,
+  showToggle = true,
+}) {
   const actionTextStyle = { fontSize: 10, fontWeight: '800', textTransform: 'none' };
 
   return (
@@ -16,14 +22,16 @@ export function ProductAdminActions({ active, error, onEdit, onToggleActive }) {
           style={styles.action}
           textStyle={actionTextStyle}
         />
-        <AppButton
-          title={active ? 'Desativar produto' : 'Ativar produto'}
-          icon={active ? 'ban-outline' : 'checkmark-circle-outline'}
-          onPress={onToggleActive}
-          variant={active ? 'danger' : 'primary'}
-          style={styles.action}
-          textStyle={actionTextStyle}
-        />
+        {showToggle ? (
+          <AppButton
+            title={active ? 'Desativar produto' : 'Ativar produto'}
+            icon={active ? 'ban-outline' : 'checkmark-circle-outline'}
+            onPress={onToggleActive}
+            variant={active ? 'danger' : 'primary'}
+            style={styles.action}
+            textStyle={actionTextStyle}
+          />
+        ) : null}
       </View>
     </View>
   );

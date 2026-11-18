@@ -23,7 +23,7 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 - `src/components/CartAddedBar.js`: confirmação visual após adicionar um produto à sacola.
 - `src/components/ProductImage.js`: exibe fotos dos produtos com fallback quando a origem remota não responde.
 - `src/services/apiClient.js`: cliente HTTP para a URL-base do API Gateway.
-- `src/services/productService.js`: listagem paginada, busca, filtros, ordenação, detalhe por ID, consultas públicas de categorias/subcategorias e criação autenticada de produtos.
+- `src/services/productService.js`: listagem paginada, busca, filtros, ordenação, detalhe por ID, consultas públicas de categorias/subcategorias e criação/edição autenticadas de produtos.
 - `src/services/authService.js`: integração dos fluxos de cadastro, login e logout com a API de autenticação.
 - `src/contexts/AuthContext.js`: usuário e token da sessão mantidos somente em memória.
 
@@ -31,7 +31,7 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 
 Copie `.env.example` para `.env` e ajuste `EXPO_PUBLIC_API_URL` para a URL-base do API Gateway fornecida pela equipe do backend. No Expo Go, configure um host acessível pelo dispositivo; `localhost` pode apontar para o próprio dispositivo. Variáveis `EXPO_PUBLIC_` ficam disponíveis no aplicativo e não devem conter segredos.
 
-Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. A listagem, busca, filtros por categoria/subcategoria e faixa de preço, ordenação e consulta de detalhes usam os endpoints públicos documentados em `API.md`. O formulário administrativo cria produtos em `POST /ws/products` com o JWT de administrador e carrega categorias/subcategorias ativas pela API. A imagem é opcional e deve ser informada como URL ou referência; upload de arquivo não está integrado. O cadastro de estoque é uma operação separada e continua fora desta etapa, portanto a criação no catálogo não registra saldo inicial.
+Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. A listagem, busca, filtros por categoria/subcategoria e faixa de preço, ordenação e consulta de detalhes usam os endpoints públicos documentados em `API.md`. O formulário administrativo cria produtos em `POST /ws/products` e edita produtos em `PUT /ws/products/{id}`, sempre com o JWT de administrador; categorias e subcategorias são carregadas pela API. A imagem é opcional e deve ser informada como URL ou referência; upload de arquivo não está integrado. O cadastro de estoque é uma operação separada e continua fora desta etapa, portanto a criação no catálogo não registra saldo inicial.
 
 Produtos `UNITÁRIO` permanecem limitados a uma unidade; produtos `QUANTITATIVO` respeitam o estoque e o limite máximo disponível no catálogo de demonstração. Essas verificações de interface não substituem a validação do backend.
 

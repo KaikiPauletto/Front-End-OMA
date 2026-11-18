@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -15,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ProductImage } from './ProductImage';
 import { categories } from '../data/categories';
+import { listCategories, listSubcategories } from '../services/productService';
 import { colors } from '../theme/colors';
 
 const priceFormatter = new Intl.NumberFormat('pt-BR', {
@@ -55,15 +57,44 @@ function getSubcategorySelection(product) {
     : null;
 }
 
-export function ProductEditModal({ visible, product, price, onClose, onSave }) {
+function getImageUrl(image) {
+  if (typeof image === 'string') {
+    return image;
+  }
+  return typeof image?.uri === 'string' ? image.uri : '';
+}
+
+function getSaveErrorMessage(error) {
+  return error instanceof Error
+    ? error.message
+    : 'Não foi possível salvar as alterações. Tente novamente.';
+}
+
+export function ProductEditModal({
+  visible,
+  product,
+  price,
+  currency = 'BRL',
+  remote = false,
+  onClose,
+  onSave,
+}) {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
   const [priceInput, setPriceInput] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [selectingSubcategory, setSelectingSubcategory] = useState(false);
+  const [categoryGroups, setCategoryGroups] = useState([]);
+  const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(false);
+  const [subcategoryLoadError, setSubcategoryLoadError] = useState('');
+  const [categoryReloadKey, setCategoryReloadKey] = useState(0);
+  const [submitError, setSubmitError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const saveLock = useRef(false);
 
   useEffect(() => {
     if (!visible || !product) {
@@ -75,10 +106,74 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
     setModel(product.model ?? '');
     setDescription(product.description ?? '');
     setImage(product.image ?? null);
+    setImageUrl(getImageUrl(product.image));
     setPriceInput(formatPrice(String(Math.round(price * 100))));
-    setSelectedSubcategory(getSubcategorySelection(product));
+    setSelectedSubcategory(remote ? null : getSubcategorySelection(product));
     setSelectingSubcategory(false);
-  }, [visible, product, price]);
+    setSubmitError('');
+  }, [visible, product, price, remote]);
+
+  useEffect(() => {
+    if (!visible || !product || !remote) {
+      setCategoryGroups([]);
+      setIsLoadingSubcategories(false);
+      setSubcategoryLoadError('');
+      return undefined;
+    }
+
+    let isActive = true;
+    setIsLoadingSubcategories(true);
+    setSubcategoryLoadError('');
+
+    async function loadSubcategories() {
+      try {
+        const categoriesFromApi = await listCategories();
+        const groups = await Promise.all(categoriesFromApi.map(async (category) => {
+          const subcategories = await listSubcategories(category.id);
+          return {
+            ...category,
+            subcategories: subcategories.map((subcategory) => ({
+              ...subcategory,
+              categoryId: category.id,
+              categoryName: category.name,
+            })),
+          };
+        }));
+
+        if (isActive) {
+          setCategoryGroups(groups);
+          const selectedId = String(product.subcategoryId ?? product.subcategory ?? '');
+          const currentSubcategory = groups
+            .flatMap((category) => category.subcategories)
+            .find((subcategory) => subcategory.id === selectedId);
+          setSelectedSubcategory(currentSubcategory ?? null);
+        }
+      } catch (error) {
+        if (isActive) {
+          setSubcategoryLoadError(getSaveErrorMessage(error));
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingSubcategories(false);
+        }
+      }
+    }
+
+    loadSubcategories();
+    return () => {
+      isActive = false;
+    };
+  }, [visible, product, remote, categoryReloadKey]);
+
+  const displayedCategoryGroups = remote ? categoryGroups : categories;
+  const currencyPrefix = currency === 'BRL' ? 'R$' : currency;
+
+  function handleFieldChange(setter) {
+    return (value) => {
+      setter(value);
+      setSubmitError('');
+    };
+  }
 
   async function handleSelectImage() {
     try {
@@ -109,35 +204,67 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
     }
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (saveLock.current) {
+      return;
+    }
+
     const parsedPrice = parsePrice(priceInput);
-    if (
+    const subcategoryId = Number(selectedSubcategory?.id);
+    const invalidFields = (
       !name.trim() ||
       !brand.trim() ||
       !model.trim() ||
       !description.trim() ||
-      !image ||
       !Number.isFinite(parsedPrice) ||
       parsedPrice <= 0 ||
-      !selectedSubcategory
-    ) {
-      Alert.alert(
-        'Dados incompletos',
-        'Preencha nome, marca, modelo, descrição, preço e subcategoria, e selecione uma imagem.',
-      );
+      !selectedSubcategory ||
+      (remote && (
+        !currency.trim() ||
+        !Number.isSafeInteger(subcategoryId) ||
+        subcategoryId <= 0
+      )) ||
+      (!remote && !image)
+    );
+
+    if (invalidFields) {
+      const message = remote
+        ? 'Preencha nome, marca, modelo, descrição, preço válido e subcategoria.'
+        : 'Preencha nome, marca, modelo, descrição, preço e subcategoria, e selecione uma imagem.';
+      if (remote) {
+        setSubmitError(message);
+      } else {
+        Alert.alert('Dados incompletos', message);
+      }
       return;
     }
 
-    onSave({
+    const editedProduct = {
       name: name.trim(),
       brand: brand.trim(),
       model: model.trim(),
       description: description.trim(),
       price: parsedPrice,
-      image,
-      category: selectedSubcategory.categoryId,
-      subcategory: selectedSubcategory.id,
-    });
+      image: remote ? imageUrl.trim() || null : image,
+      ...(remote
+        ? { currency: currency.trim(), subcategoryId }
+        : {
+          category: selectedSubcategory.categoryId,
+          subcategory: selectedSubcategory.id,
+        }),
+    };
+
+    saveLock.current = true;
+    setIsSaving(true);
+    setSubmitError('');
+    try {
+      await onSave(editedProduct);
+    } catch (error) {
+      setSubmitError(getSaveErrorMessage(error));
+    } finally {
+      saveLock.current = false;
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -180,63 +307,104 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
             </View>
 
             {selectingSubcategory ? (
-              <ScrollView>
-                {categories.map((categoryItem) => (
-                  <View key={categoryItem.id}>
-                    <Text style={styles.categoryGroupTitle}>{categoryItem.name}</Text>
-                    {categoryItem.subcategories.map((subcategory) => (
-                      <Pressable
-                        key={subcategory.id}
-                        onPress={() => {
-                          setSelectedSubcategory({
-                            ...subcategory,
-                            categoryId: categoryItem.id,
-                            categoryName: categoryItem.name,
-                          });
-                          setSelectingSubcategory(false);
-                        }}
-                        style={styles.subcategoryOption}
-                      >
-                        <Text style={styles.subcategoryText}>{subcategory.name}</Text>
-                        {selectedSubcategory?.id === subcategory.id &&
-                        selectedSubcategory.categoryId === categoryItem.id ? (
-                          <Ionicons name="checkmark" size={20} color={colors.forest} />
-                        ) : null}
-                      </Pressable>
-                    ))}
+              <>
+                {isLoadingSubcategories ? (
+                  <ActivityIndicator color={colors.forest} style={styles.loadingIndicator} />
+                ) : null}
+                {subcategoryLoadError ? (
+                  <View>
+                    <Text style={styles.errorText}>{subcategoryLoadError}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setCategoryReloadKey((key) => key + 1)}
+                      style={styles.retryButton}
+                    >
+                      <Text style={styles.retryText}>Tentar novamente</Text>
+                    </Pressable>
                   </View>
-                ))}
-              </ScrollView>
+                ) : null}
+                <ScrollView>
+                  {displayedCategoryGroups.map((categoryItem) => (
+                    <View key={categoryItem.id}>
+                      <Text style={styles.categoryGroupTitle}>{categoryItem.name}</Text>
+                      {categoryItem.subcategories.map((subcategory) => (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={subcategory.id}
+                          onPress={() => {
+                            handleFieldChange(setSelectedSubcategory)({
+                              ...subcategory,
+                              categoryId: categoryItem.id,
+                              categoryName: categoryItem.name,
+                            });
+                            setSelectingSubcategory(false);
+                          }}
+                          style={styles.subcategoryOption}
+                        >
+                          <Text style={styles.subcategoryText}>{subcategory.name}</Text>
+                          {selectedSubcategory?.id === subcategory.id &&
+                          selectedSubcategory.categoryId === categoryItem.id ? (
+                            <Ionicons name="checkmark" size={20} color={colors.forest} />
+                          ) : null}
+                        </Pressable>
+                      ))}
+                    </View>
+                  ))}
+                  {!isLoadingSubcategories &&
+                  !subcategoryLoadError &&
+                  displayedCategoryGroups.every((category) => category.subcategories.length === 0) ? (
+                    <Text style={styles.emptySubcategories}>Nenhuma subcategoria disponível.</Text>
+                  ) : null}
+                </ScrollView>
+              </>
             ) : (
               <>
                 <ScrollView
                   contentContainerStyle={styles.form}
                   keyboardShouldPersistTaps="handled"
                 >
-                  <Text style={styles.label}>Imagem</Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={handleSelectImage}
-                    style={styles.imagePicker}
-                  >
-                    {image ? (
-                      <ProductImage
-                        source={image}
-                        style={styles.preview}
-                        resizeMode="cover"
-                        accessibilityLabel={name || 'Imagem do produto'}
+                  {remote ? (
+                    <>
+                      <Text style={styles.label}>URL da imagem (opcional)</Text>
+                      <TextInput
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        onChangeText={handleFieldChange(setImageUrl)}
+                        placeholder="https://..."
+                        placeholderTextColor={colors.muted}
+                        style={styles.input}
+                        value={imageUrl}
                       />
-                    ) : (
-                      <>
-                        <Ionicons name="camera-outline" size={26} color={colors.forest} />
-                        <Text style={styles.imagePickerText}>Selecionar imagem</Text>
-                      </>
-                    )}
-                  </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.label}>Imagem</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleSelectImage}
+                        style={styles.imagePicker}
+                      >
+                        {image ? (
+                          <ProductImage
+                            source={image}
+                            style={styles.preview}
+                            resizeMode="cover"
+                            accessibilityLabel={name || 'Imagem do produto'}
+                          />
+                        ) : (
+                          <>
+                            <Ionicons name="camera-outline" size={26} color={colors.forest} />
+                            <Text style={styles.imagePickerText}>Selecionar imagem</Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </>
+                  )}
 
                   <Text style={styles.label}>Nome</Text>
                   <TextInput
-                    onChangeText={setName}
+                    onChangeText={handleFieldChange(setName)}
                     placeholder="Nome do produto"
                     placeholderTextColor={colors.muted}
                     style={styles.input}
@@ -245,7 +413,7 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
 
                   <Text style={styles.label}>Marca</Text>
                   <TextInput
-                    onChangeText={setBrand}
+                    onChangeText={handleFieldChange(setBrand)}
                     placeholder="Marca do produto"
                     placeholderTextColor={colors.muted}
                     style={styles.input}
@@ -254,7 +422,7 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
 
                   <Text style={styles.label}>Modelo</Text>
                   <TextInput
-                    onChangeText={setModel}
+                    onChangeText={handleFieldChange(setModel)}
                     placeholder="Modelo do produto"
                     placeholderTextColor={colors.muted}
                     style={styles.input}
@@ -263,10 +431,10 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
 
                   <Text style={styles.label}>Preço</Text>
                   <View style={styles.priceInputContainer}>
-                    <Text style={styles.currencyPrefix}>R$</Text>
+                    <Text style={styles.currencyPrefix}>{currencyPrefix}</Text>
                     <TextInput
                       keyboardType="number-pad"
-                      onChangeText={(value) => setPriceInput(formatPrice(value))}
+                      onChangeText={(value) => handleFieldChange(setPriceInput)(formatPrice(value))}
                       placeholder="0,00"
                       placeholderTextColor={colors.muted}
                       style={styles.priceInput}
@@ -287,25 +455,35 @@ export function ProductEditModal({ visible, product, price, onClose, onSave }) {
                     </Text>
                     <Ionicons name="chevron-down" size={18} color={colors.muted} />
                   </Pressable>
+                  {remote && subcategoryLoadError ? (
+                    <Text style={styles.errorText}>{subcategoryLoadError}</Text>
+                  ) : null}
 
                   <Text style={styles.label}>Descrição</Text>
                   <TextInput
                     multiline
-                    onChangeText={setDescription}
+                    onChangeText={handleFieldChange(setDescription)}
                     placeholder="Descreva os detalhes do produto"
                     placeholderTextColor={colors.muted}
                     style={[styles.input, styles.descriptionInput]}
                     textAlignVertical="top"
                     value={description}
                   />
+                  {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
                 </ScrollView>
                 <View style={styles.footer}>
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityState={{ disabled: isSaving }}
+                    disabled={isSaving}
                     onPress={handleSave}
-                    style={styles.saveButton}
+                    style={[styles.saveButton, isSaving && styles.disabledButton]}
                   >
-                    <Text style={styles.saveButtonText}>Salvar alterações</Text>
+                    {isSaving ? (
+                      <ActivityIndicator color={colors.white} />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Salvar alterações</Text>
+                    )}
                   </Pressable>
                 </View>
               </>
@@ -409,6 +587,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  disabledButton: { opacity: 0.7 },
   saveButtonText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   categoryGroupTitle: {
     color: colors.forest,
@@ -426,4 +605,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   subcategoryText: { color: colors.ink, fontSize: 14 },
+  loadingIndicator: { paddingVertical: 12 },
+  errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginBottom: 10 },
+  retryButton: { alignSelf: 'flex-start', marginBottom: 12 },
+  retryText: { color: colors.forest, fontSize: 12, fontWeight: '800' },
+  emptySubcategories: { color: colors.muted, fontSize: 13, paddingVertical: 16 },
 });

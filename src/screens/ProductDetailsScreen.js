@@ -29,12 +29,15 @@ import {
   getProductStock,
 } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
-import { getProductById } from '../services/productService';
+import {
+  getProductById,
+  updateProduct as updateRemoteProduct,
+} from '../services/productService';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
 export function ProductDetailsScreen({ navigation, route }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const isAdministrator = user?.role === 'ADMINISTRADOR';
   const { products: catalogProducts, updateProduct: updateCatalogProduct } = useProductCatalog();
   const { products: sellerProducts, updateProduct: updateSellerProduct } = useSellerProducts();
@@ -183,7 +186,15 @@ export function ProductDetailsScreen({ navigation, route }) {
     }
   }
 
-  function handleSaveEdits(editedProduct) {
+  async function handleSaveEdits(editedProduct) {
+    if (isRemoteProduct) {
+      await updateRemoteProduct(product.id, editedProduct, token);
+      setEditModalVisible(false);
+      setCartConfirmationVisible(false);
+      setReloadKey((key) => key + 1);
+      return;
+    }
+
     const updates = { ...editedProduct };
     if (product.variants?.length && variant) {
       updates.variants = product.variants.map((item) => (
@@ -193,8 +204,7 @@ export function ProductDetailsScreen({ navigation, route }) {
 
     const updateProduct = isSellerProduct ? updateSellerProduct : updateCatalogProduct;
     if (!updateProduct(product.id, updates)) {
-      Alert.alert('Não foi possível salvar', 'O produto não foi encontrado no catálogo.');
-      return;
+      throw new Error('O produto não foi encontrado no catálogo.');
     }
 
     setEditModalVisible(false);
@@ -390,13 +400,14 @@ export function ProductDetailsScreen({ navigation, route }) {
         ) : null}
       </ScrollView>
 
-      {!isRemoteProduct && isAdministrator ? (
+      {isAdministrator ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
           <ProductAdminActions
             active={product.active !== false}
             error={productStatusError}
             onEdit={() => setEditModalVisible(true)}
             onToggleActive={toggleProductStatus}
+            showToggle={!isRemoteProduct}
           />
         </View>
       ) : !isRemoteProduct && !cartConfirmationVisible ? (
@@ -419,15 +430,19 @@ export function ProductDetailsScreen({ navigation, route }) {
           onContinue={() => { setCartConfirmationVisible(false); navigation.navigate('MainTabs', { screen: 'Carrinho' }); }}
         />
       ) : null}
+      {isAdministrator ? (
+        <ProductEditModal
+          visible={editModalVisible}
+          product={product}
+          price={isRemoteProduct ? (product.originalPrice ?? unitPrice) : unitPrice}
+          currency={product.currency || 'BRL'}
+          remote={isRemoteProduct}
+          onClose={() => setEditModalVisible(false)}
+          onSave={handleSaveEdits}
+        />
+      ) : null}
       {!isRemoteProduct ? (
         <>
-          <ProductEditModal
-            visible={editModalVisible}
-            product={product}
-            price={unitPrice}
-            onClose={() => setEditModalVisible(false)}
-            onSave={handleSaveEdits}
-          />
           <ProductDeactivationModal
             visible={deactivationModalVisible}
             onCancel={() => setDeactivationModalVisible(false)}
