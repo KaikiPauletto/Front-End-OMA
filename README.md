@@ -1,6 +1,6 @@
 # OMA — artigos gaúchos
 
-Aplicativo mobile em React Native com Expo, escrito em JavaScript. Esta primeira base contém uma vitrine demonstrativa e o fluxo inicial de boas-vindas, login e cadastro. A autenticação e o cadastro ainda não se comunicam com o backend.
+Aplicativo mobile em React Native com Expo, escrito em JavaScript. A autenticação, o cadastro e o logout usam o API Gateway; catálogo, carrinho e checkout permanecem demonstrativos nesta etapa.
 
 ## Executar
 
@@ -22,24 +22,22 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 - `src/data/categories.js`: categorias e subcategorias demonstrativas; substituir pela taxonomia administrada pelo backend quando o contrato estiver definido.
 - `src/components/CartAddedBar.js`: confirmação visual após adicionar um produto à sacola.
 - `src/components/ProductImage.js`: exibe fotos dos produtos com fallback quando a origem remota não responde.
-- `src/services/apiClient.js`: cliente HTTP genérico, aguardando os contratos reais da API.
-- `src/config/appConfig.js`: configurações do aplicativo, incluindo o modo de demonstração.
-- `src/utils/enterDemoMode.js`: navegação temporária para a loja durante a demonstração.
+- `src/services/apiClient.js`: cliente HTTP para a URL-base do API Gateway.
+- `src/services/authService.js`: integração dos fluxos de cadastro, login e logout com a API de autenticação.
+- `src/contexts/AuthContext.js`: usuário e token da sessão mantidos somente em memória.
 
 ## Integração futura
 
-Copie `.env.example` para `.env` e ajuste `EXPO_PUBLIC_API_URL` para a URL base fornecida pela equipe do backend. Variáveis `EXPO_PUBLIC_` ficam disponíveis no aplicativo e não devem conter segredos.
+Copie `.env.example` para `.env` e ajuste `EXPO_PUBLIC_API_URL` para a URL-base do API Gateway fornecida pela equipe do backend. No Expo Go, configure um host acessível pelo dispositivo; `localhost` pode apontar para o próprio dispositivo. Variáveis `EXPO_PUBLIC_` ficam disponíveis no aplicativo e não devem conter segredos.
 
-Endpoints, formatos de payload, autenticação e cálculo de frete ainda não foram definidos, portanto nenhum contrato de API foi presumido. A camada de serviços deve ser implementada quando esses contratos estiverem disponíveis. Preços e estoques do catálogo atual são apenas dados demonstrativos: o backend deverá revalidá-los. A interface não confirma pedidos nem pagamentos.
+Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. Catálogo, carrinho, pedidos, checkout e pagamento continuam demonstrativos e fora desta etapa; preços e estoques devem ser revalidados pelo backend quando esses módulos forem integrados.
 
 Produtos `UNITÁRIO` permanecem limitados a uma unidade; produtos `QUANTITATIVO` respeitam o estoque e o limite máximo disponível no catálogo de demonstração. Essas verificações de interface não substituem a validação do backend.
 
 
-## Fluxo de acesso em modo de demonstração
+## Fluxo de acesso
 
-Ao iniciar, o aplicativo abre a tela **Bem-vindo**. Nela, é possível acessar o formulário de login ou de cadastro. Enquanto `DEMO_MODE` estiver como `true` em `src/config/appConfig.js`, os botões **Entrar** e **Criar conta** abrem a loja sem validar os campos e sem enviar ou armazenar dados.
-
-Esse comportamento existe somente para testar as telas e a navegação. Ele **não realiza autenticação, não cria uma conta e não representa o fluxo definitivo**. O cadastro público deve criar clientes com perfil `CLIENTE` (RN05), e o login real deve exigir credenciais válidas (RN09), mantendo a sessão conforme RN11. Antes de integrar o backend, a equipe deverá implementar esses fluxos conforme os contratos reais da API. Para desativar o bypass demonstrativo, altere `DEMO_MODE` para `false` e implemente a autenticação/cadastro reais.
+Ao iniciar sem sessão, o aplicativo abre a tela **Bem-vindo**, com opções de login e cadastro. O cadastro envia nome, e-mail e senha ao API Gateway e, após sucesso, direciona para o login. O login valida as credenciais no backend e mantém o usuário e o JWT em memória. Ao sair, o aplicativo tenta revogar o token no Gateway e encerra a sessão local; se não houver confirmação do servidor, informa essa condição sem afirmar que a revogação ocorreu.
 
 
 ## Padrão visual e navegação atualizados

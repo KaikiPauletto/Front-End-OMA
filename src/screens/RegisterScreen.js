@@ -1,18 +1,28 @@
-import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
-import { DEMO_MODE } from '../config/appConfig';
-import { enterDemoMode } from '../utils/enterDemoMode';
+import { getAuthErrorMessage, registerUser } from '../services/authService';
 
 export function RegisterScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLock = useRef(false);
 
-  function handleSubmit() {
-    if (DEMO_MODE) {
-      enterDemoMode(navigation);
+  async function handleSubmit() {
+    if (submitLock.current) {
       return;
     }
 
@@ -21,10 +31,25 @@ export function RegisterScreen({ navigation }) {
       return;
     }
 
-    Alert.alert(
-      'Cadastro ainda não conectado',
-      'A conta será criada quando os campos obrigatórios e o contrato da API forem definidos.',
-    );
+    submitLock.current = true;
+    setIsSubmitting(true);
+    try {
+      await registerUser({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      });
+      Alert.alert(
+        'Conta criada',
+        'Sua conta foi criada com sucesso. Faça login para continuar.',
+        [{ text: 'Ir para o login', onPress: () => navigation.navigate('Login') }],
+      );
+    } catch (error) {
+      Alert.alert('Não foi possível criar a conta', getAuthErrorMessage(error, 'register'));
+    } finally {
+      submitLock.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -55,6 +80,7 @@ export function RegisterScreen({ navigation }) {
           onChangeText={setName}
           placeholder="Como podemos te chamar?"
           placeholderTextColor={colors.muted}
+          editable={!isSubmitting}
           style={styles.input}
           value={name}
         />
@@ -65,6 +91,7 @@ export function RegisterScreen({ navigation }) {
           onChangeText={setEmail}
           placeholder="voce@email.com"
           placeholderTextColor={colors.muted}
+          editable={!isSubmitting}
           style={styles.input}
           value={email}
         />
@@ -74,17 +101,24 @@ export function RegisterScreen({ navigation }) {
           placeholder="Crie uma senha"
           placeholderTextColor={colors.muted}
           secureTextEntry
+          editable={!isSubmitting}
           style={styles.input}
           value={password}
         />
-        <Pressable onPress={handleSubmit} style={styles.submit}>
-          <Text style={styles.submitText}>Criar conta</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
+          disabled={isSubmitting}
+          onPress={handleSubmit}
+          style={[styles.submit, isSubmitting && styles.submitDisabled]}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitText}>Criar conta</Text>
+          )}
         </Pressable>
-        <Text style={styles.footnote}>
-          {DEMO_MODE
-            ? 'Modo demonstração: continuar não cria uma conta nem envia os dados.'
-            : 'O cadastro será habilitado após a definição dos campos e integração com o backend.'}
-        </Text>
+        <Text style={styles.footnote}>O cadastro cria uma conta de cliente.</Text>
       </ScrollView>
     </View>
   );
@@ -143,6 +177,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 5,
   },
+  submitDisabled: { opacity: 0.7 },
   submitText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   footnote: { color: colors.muted, textAlign: 'center', fontSize: 10, lineHeight: 16, marginTop: 17 },
 });

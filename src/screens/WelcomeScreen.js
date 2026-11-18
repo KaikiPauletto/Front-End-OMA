@@ -38,8 +38,6 @@ export function WelcomeScreen({ navigation }) {
           </Pressable>
         </View>
       </ScrollView>
-
-      <Text style={styles.demoNotice}>Aplicativo em modo de demonstração</Text>
     </View>
   );
 }
@@ -104,12 +102,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.4,
-  },
-  demoNotice: {
-    position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    color: colors.muted,
-    fontSize: 10,
   },
 });

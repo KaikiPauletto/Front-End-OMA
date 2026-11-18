@@ -8,7 +8,36 @@ function getApiBaseUrl() {
   return baseUrl.replace(/\/+$/, '');
 }
 
-export async function apiRequest(path, options = {}) {
+export class ApiError extends Error {
+  constructor(response, rawBody, body) {
+    const message = typeof body === 'string' && body.trim()
+      ? body.trim()
+      : `A API respondeu com HTTP ${response.status}.`;
+    super(message);
+    this.name = 'ApiError';
+    this.status = response.status;
+    this.rawBody = rawBody;
+    this.body = body;
+  }
+}
+
+function decodeBody(rawBody, contentType) {
+  if (rawBody.length === 0) {
+    return null;
+  }
+
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.parse(rawBody);
+    } catch {
+      return rawBody;
+    }
+  }
+
+  return rawBody;
+}
+
+export async function apiRequest(path, options = {}, { includeStatus = false } = {}) {
   if (typeof path !== 'string' || !path.startsWith('/')) {
     throw new Error('O caminho da API deve ser relativo e começar com "/".');
   }
@@ -21,18 +50,19 @@ export async function apiRequest(path, options = {}) {
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`A API respondeu com HTTP ${response.status}.`);
-  }
-
   if (response.status === 204) {
-    return null;
+    return includeStatus ? { status: response.status, data: null } : null;
   }
 
+  const rawBody = await response.text();
   const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.includes('application/json')) {
-    throw new Error('A API retornou uma resposta que não é JSON.');
+  const body = decodeBody(rawBody, contentType);
+
+  if (!response.ok) {
+    throw new ApiError(response, rawBody, body);
   }
 
-  return response.json();
+  return includeStatus
+    ? { status: response.status, data: body }
+    : body;
 }

@@ -1,36 +1,48 @@
-import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
-import { DEMO_MODE } from '../config/appConfig';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuthErrorMessage } from '../services/authService';
 
 export function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const { signIn } = useAuth();
 
-  function handleSubmit() {
+  async function handleSubmit() {
+    if (submitLock.current) {
+      return;
+    }
+
     if (!email.trim() || !password) {
       Alert.alert('Dados incompletos', 'Informe seu e-mail e sua senha.');
       return;
     }
 
-    if (DEMO_MODE) {
-      const result = signIn(email, password);
-      if (!result.ok) {
-        Alert.alert('Conta não encontrada', 'Informe o e-mail de uma das contas demonstrativas.');
-        return;
-      }
-
+    submitLock.current = true;
+    setIsSubmitting(true);
+    try {
+      await signIn(email.trim(), password);
       setPassword('');
-      return;
+    } catch (error) {
+      Alert.alert('Não foi possível entrar', getAuthErrorMessage(error, 'signin'));
+    } finally {
+      submitLock.current = false;
+      setIsSubmitting(false);
     }
-
-    Alert.alert(
-      'Acesso ainda não conectado',
-      'O login será ativado quando a API de autenticação estiver disponível.',
-    );
   }
 
   return (
@@ -58,6 +70,7 @@ export function LoginScreen({ navigation }) {
           onChangeText={setEmail}
           placeholder="voce@email.com"
           placeholderTextColor={colors.muted}
+          editable={!isSubmitting}
           style={styles.input}
           value={email}
         />
@@ -67,17 +80,24 @@ export function LoginScreen({ navigation }) {
           placeholder="Sua senha"
           placeholderTextColor={colors.muted}
           secureTextEntry
+          editable={!isSubmitting}
           style={styles.input}
           value={password}
         />
-        <Pressable onPress={handleSubmit} style={styles.submit}>
-          <Text style={styles.submitText}>Entrar</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
+          disabled={isSubmitting}
+          onPress={handleSubmit}
+          style={[styles.submit, isSubmitting && styles.submitDisabled]}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitText}>Entrar</Text>
+          )}
         </Pressable>
-        <Text style={styles.footnote}>
-          {DEMO_MODE
-            ? 'Contas demonstrativas: usu@gmail.com (cliente) · adm@gmail.com (vendedor). Informe qualquer senha não vazia.'
-            : 'A autenticação será habilitada quando a integração com o backend estiver disponível.'}
-        </Text>
+        <Text style={styles.footnote}>Entre com o e-mail e a senha da sua conta OMA.</Text>
       </ScrollView>
     </View>
   );
@@ -125,6 +145,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 5,
   },
+  submitDisabled: { opacity: 0.7 },
   submitText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   footnote: { color: colors.muted, textAlign: 'center', fontSize: 10, lineHeight: 16, marginTop: 22 },
 });

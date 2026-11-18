@@ -1,26 +1,41 @@
 import { createContext, useContext, useMemo, useState } from 'react';
-import { authenticateMockUser } from '../services/mockAuth';
+import { authenticateUser, revokeToken } from '../services/authService';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
 
-  function signIn(email, password) {
-    const authenticatedUser = authenticateMockUser(email, password);
-    if (!authenticatedUser) {
-      return { ok: false };
+  async function signIn(email, password) {
+    const session = await authenticateUser({ email, password });
+    setUser(session.user);
+    setToken(session.token);
+  }
+
+  async function signOut() {
+    try {
+      if (!token) {
+        return {
+          serverRevoked: false,
+          error: new Error('Não há token de sessão disponível para revogação.'),
+        };
+      }
+
+      await revokeToken(token);
+      return { serverRevoked: true };
+    } catch (error) {
+      return { serverRevoked: false, error };
+    } finally {
+      setUser(null);
+      setToken(null);
     }
-
-    setUser(authenticatedUser);
-    return { ok: true };
   }
 
-  function signOut() {
-    setUser(null);
-  }
-
-  const value = useMemo(() => ({ user, signIn, signOut }), [user]);
+  const value = useMemo(
+    () => ({ user, token, signIn, signOut }),
+    [user, token],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

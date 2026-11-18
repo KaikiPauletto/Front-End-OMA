@@ -1,7 +1,16 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppHeader } from '../components/AppHeader';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuthErrorMessage } from '../services/authService';
 import { colors } from '../theme/colors';
 
 const options = [
@@ -12,10 +21,33 @@ const options = [
 
 export function ProfileScreen({ navigation }) {
   const { user, signOut } = useAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const signOutLock = useRef(false);
   const isAdministrator = user?.role === 'ADMINISTRADOR';
   const profileOptions = isAdministrator
     ? []
     : options;
+
+  async function handleSignOut() {
+    if (signOutLock.current) {
+      return;
+    }
+
+    signOutLock.current = true;
+    setIsSigningOut(true);
+    try {
+      const result = await signOut();
+      if (!result.serverRevoked) {
+        Alert.alert(
+          'Sessão encerrada neste dispositivo',
+          `A revogação no servidor não foi confirmada. ${getAuthErrorMessage(result.error, 'logout')}`,
+        );
+      }
+    } finally {
+      signOutLock.current = false;
+      setIsSigningOut(false);
+    }
+  }
 
   return (
     <View style={styles.screen}>
@@ -59,8 +91,18 @@ export function ProfileScreen({ navigation }) {
             ))}
           </View>
         ) : null}
-        <Pressable accessibilityRole="button" onPress={signOut} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Sair da conta</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isSigningOut, busy: isSigningOut }}
+          disabled={isSigningOut}
+          onPress={handleSignOut}
+          style={[styles.logoutButton, isSigningOut && styles.logoutButtonDisabled]}
+        >
+          {isSigningOut ? (
+            <ActivityIndicator color={colors.clay} />
+          ) : (
+            <Text style={styles.logoutText}>Sair da conta</Text>
+          )}
         </Pressable>
         {!isAdministrator ? <Text style={styles.version}>OMA · Artigos gaúchos</Text> : null}
       </View>
@@ -118,6 +160,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  logoutButtonDisabled: { opacity: 0.7 },
   logoutText: { color: colors.clay, fontSize: 12, fontWeight: '800' },
   version: { marginTop: 'auto', color: colors.muted, textAlign: 'center', fontSize: 10, paddingBottom: 5 },
 });
