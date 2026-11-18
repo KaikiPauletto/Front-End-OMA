@@ -1,15 +1,43 @@
-import { ScrollView, StyleSheet, Text, Pressable, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppHeader } from '../components/AppHeader';
-import { useProductCatalog } from '../contexts/ProductCatalogContext';
-import { categories } from '../data/categories';
-import { getAvailableProducts } from '../data/products';
+import { listCategories } from '../services/productService';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
 export function CategoriesScreen({ navigation }) {
-  const { products } = useProductCatalog();
-  const availableProducts = getAvailableProducts(products);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+
+    listCategories()
+      .then((result) => {
+        if (active) {
+          setCategories(result);
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as categorias.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
 
   return (
     <View style={styles.screen}>
@@ -27,28 +55,32 @@ export function CategoriesScreen({ navigation }) {
           <View style={styles.rule} />
         </View>
 
-        {categories.map((category) => {
-          const productCount = availableProducts.filter((product) => product.category === category.id).length;
-          return (
+        {loading ? (
+          <ActivityIndicator style={styles.state} color={colors.forest} />
+        ) : error ? (
+          <View style={styles.state}>
+            <Text style={styles.stateText}>{error}</Text>
+            <Pressable onPress={() => setReloadKey((key) => key + 1)}>
+              <Text style={styles.retry}>Tentar novamente</Text>
+            </Pressable>
+          </View>
+        ) : categories.map((category) => (
             <Pressable
               key={category.id}
               onPress={() => navigation.navigate('Subcategorias', { categoryId: category.id })}
               style={({ pressed }) => [styles.categoryCard, pressed && styles.pressed]}
             >
               <View style={styles.iconCircle}>
-                <Ionicons name={category.icon} size={21} color={colors.forest} />
+                <Ionicons name="grid-outline" size={21} color={colors.forest} />
               </View>
               <View style={styles.categoryCopy}>
                 <Text style={styles.categoryName}>{category.name}</Text>
-                <Text style={styles.categoryDescription}>{category.description}</Text>
               </View>
               <View style={styles.trailing}>
-                <Text style={styles.count}>{productCount}</Text>
                 <Ionicons name="chevron-forward" size={19} color={colors.muted} />
               </View>
             </Pressable>
-          );
-        })}
+        ))}
       </ScrollView>
     </View>
   );
@@ -100,7 +132,8 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '600',
   },
-  categoryDescription: { color: colors.muted, fontSize: 10, marginTop: 2 },
   trailing: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  count: { color: colors.muted, fontSize: 10 },
+  state: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20 },
+  stateText: { color: colors.muted, fontSize: 12, textAlign: 'center' },
+  retry: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 10 },
 });

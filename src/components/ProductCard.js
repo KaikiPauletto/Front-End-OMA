@@ -12,6 +12,8 @@ export function ProductCard({
   onAddToCart,
   onEdit,
   layout = 'horizontal',
+  interactive = true,
+  showAction = true,
 }) {
   const { user } = useAuth();
   const isGrid = layout === 'grid';
@@ -20,7 +22,7 @@ export function ProductCard({
 
   return (
     <View style={[styles.card, isGrid && styles.gridCard, isCompact && styles.compactCard]}>
-      <Pressable onPress={onPress} style={styles.productArea}>
+      <Pressable disabled={!interactive} onPress={onPress} style={styles.productArea}>
         <View style={[
           styles.artwork,
           isGrid && styles.gridArtwork,
@@ -46,7 +48,7 @@ export function ProductCard({
           <Text style={styles.price}>{formatCurrency(product.price)}</Text>
         </View>
       </Pressable>
-      {(!isAdministrator || onEdit) ? (
+      {showAction && (!isAdministrator || onEdit) ? (
         <View style={[
           styles.buttonContainer,
           isGrid && styles.gridButtonContainer,

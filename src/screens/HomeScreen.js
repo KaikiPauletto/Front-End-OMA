@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   Image,
   ImageBackground,
   Modal,
@@ -19,14 +19,7 @@ import { EditorialSection } from '../components/EditorialSection';
 import { ProductCard } from '../components/ProductCard';
 import { SectionTitle } from '../components/SectionTitle';
 import { useAuth } from '../contexts/AuthContext';
-import { useCart } from '../contexts/CartContext';
-import { useProductCatalog } from '../contexts/ProductCatalogContext';
-import { categories, getCategoryById } from '../data/categories';
-import {
-  getAvailableProducts,
-  productSortOptions,
-  sortProducts,
-} from '../data/products';
+import { listCategories, listProducts, productSortOptions } from '../services/productService';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
@@ -39,61 +32,99 @@ const brands = [
   { name: 'Mor', image: require('../assets/brands/mor.jpg') },
   { name: 'MateNativo', image: require('../assets/brands/matenativo.webp') },
 ];
-const PRODUCTS_PER_PAGE = 30;
+const PRODUCTS_PER_PAGE = 10;
 
 export function HomeScreen({ navigation }) {
   const [search, setSearch] = useState('');
-  const [productPage, setProductPage] = useState(1);
+  const [productPage, setProductPage] = useState(0);
   const [categoryId, setCategoryId] = useState('');
-  const [sortBy, setSortBy] = useState('bestsellers');
+  const [sortBy, setSortBy] = useState('description-asc');
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [categoryError, setCategoryError] = useState('');
+  const [productError, setProductError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const { width: screenWidth } = useWindowDimensions();
   const heroHeight = Math.min(400, Math.max(300, (screenWidth - 40) * (400 / 350)));
   const { user } = useAuth();
-  const { addItem } = useCart();
-  const { products } = useProductCatalog();
-
-  const availableProducts = useMemo(
-    () => (user?.role === 'ADMINISTRADOR' ? products : getAvailableProducts(products)),
-    [products, user?.role],
-  );
-  const featuredProducts = useMemo(
-    () => sortProducts(availableProducts, 'bestsellers').slice(0, 5),
-    [availableProducts],
-  );
-  const selectedCategory = getCategoryById(categoryId);
-  const filteredProducts = useMemo(() => {
-    const categoryProducts = availableProducts.filter(
-      (product) => !categoryId || product.category === categoryId,
-    );
-
-    return sortProducts(categoryProducts, sortBy);
-  }, [availableProducts, categoryId, sortBy]);
-  const pageCount = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
-  const pageProducts = filteredProducts.slice(
-    (productPage - 1) * PRODUCTS_PER_PAGE,
-    productPage * PRODUCTS_PER_PAGE,
-  );
+  const selectedCategory = categories.find((category) => category.id === categoryId);
   const productRows = [];
-  for (let index = 0; index < pageProducts.length; index += 2) {
-    productRows.push(pageProducts.slice(index, index + 2));
+  for (let index = 0; index < products.length; index += 2) {
+    productRows.push(products.slice(index, index + 2));
   }
+
+  useEffect(() => {
+    let active = true;
+    listCategories()
+      .then((result) => {
+        if (active) {
+          setCategories(result);
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setCategoryError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as categorias.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setProductError('');
+    setProducts([]);
+    setTotalPages(0);
+    setTotalElements(0);
+
+    listProducts({
+      categoryId,
+      sort: productSortOptions.find((option) => option.id === sortBy)?.sort,
+      page: productPage,
+      size: PRODUCTS_PER_PAGE,
+    })
+      .then((result) => {
+        if (active) {
+          setProducts(result.products);
+          setProductPage(result.page);
+          setTotalPages(result.totalPages);
+          setTotalElements(result.totalElements);
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setProductError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os produtos.');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [categoryId, sortBy, productPage, reloadKey]);
 
   function openSearch() {
     navigation.navigate('Produtos', { searchQuery: search.trim() });
   }
 
-  function handleAddToCart(product) {
-    const result = addItem(product);
-    Alert.alert(
-      result.ok ? 'Adicionado à sacola' : 'Não foi possível adicionar',
-      result.message,
-    );
-  }
+  function changePage(nextPage) {
+    if (loading || nextPage < 0 || nextPage >= totalPages) {
+      return;
+    }
 
-  function openProduct(product) {
-    navigation.navigate('ProductDetails', { productId: product.id });
+    setProductPage(nextPage);
   }
 
   return (
@@ -141,38 +172,12 @@ export function HomeScreen({ navigation }) {
                 icon="arrow-forward"
                 variant="primary"
                 size="small"
-                onPress={() => navigation.navigate('Produtos', { mode: 'collection' })}
+                onPress={() => navigation.navigate('Produtos')}
                 style={styles.heroButton}
                 textStyle={styles.heroButtonText}
               />
             </View>
           </ImageBackground>
-        </View>
-
-        <View style={styles.section}>
-          <SectionTitle
-            title="Mais Vendidos"
-            action="Ver todos"
-            onActionPress={() => navigation.navigate('Produtos', { mode: 'bestsellers' })}
-          />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.productList}
-          >
-            {featuredProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onPress={() => openProduct(product)}
-                onAddToCart={() => handleAddToCart(product)}
-                onEdit={() => navigation.navigate('ProductDetails', {
-                  productId: product.id,
-                  editOnOpen: true,
-                })}
-              />
-            ))}
-          </ScrollView>
         </View>
 
         <View style={styles.brandsSection}>
@@ -224,8 +229,21 @@ export function HomeScreen({ navigation }) {
             </Pressable>
           </View>
           <Text style={styles.catalogCount}>
-            {filteredProducts.length} {filteredProducts.length === 1 ? 'produto disponível' : 'produtos disponíveis'}
+            {loading
+              ? 'Carregando produtos...'
+              : `${totalElements} ${totalElements === 1 ? 'produto no catálogo' : 'produtos no catálogo'}`}
           </Text>
+          {categoryError ? <Text style={styles.emptyProducts}>{categoryError}</Text> : null}
+          {productError ? (
+            <View style={styles.productState}>
+              <Text style={styles.emptyProducts}>{productError}</Text>
+              <Pressable onPress={() => setReloadKey((key) => key + 1)}>
+                <Text style={styles.retryText}>Tentar novamente</Text>
+              </Pressable>
+            </View>
+          ) : loading ? (
+            <ActivityIndicator style={styles.productState} color={colors.forest} />
+          ) : null}
           <View style={styles.productGrid}>
             {productRows.map((row, rowIndex) => (
               <View key={`product-row-${rowIndex}`} style={styles.productGridRow}>
@@ -234,42 +252,38 @@ export function HomeScreen({ navigation }) {
                     key={product.id}
                     product={product}
                     layout="grid"
-                    onPress={() => openProduct(product)}
-                    onAddToCart={() => handleAddToCart(product)}
-                    onEdit={() => navigation.navigate('ProductDetails', {
-                      productId: product.id,
-                      editOnOpen: true,
-                    })}
+                    interactive={false}
+                    showAction={false}
                   />
                 ))}
                 {row.length === 1 ? <View style={styles.gridPlaceholder} /> : null}
               </View>
             ))}
           </View>
-          {filteredProducts.length === 0 ? (
+          {!loading && !productError && products.length === 0 ? (
             <Text style={styles.emptyProducts}>Nenhum produto encontrado nesta categoria.</Text>
           ) : null}
-          {pageCount > 1 ? (
+          {totalPages > 1 ? (
             <View style={styles.pagination}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Página anterior"
-                accessibilityState={{ disabled: productPage === 1 }}
-                disabled={productPage === 1}
-                onPress={() => setProductPage((page) => page - 1)}
-                style={[styles.pageButton, productPage === 1 && styles.pageButtonDisabled]}
+                accessibilityState={{ disabled: productPage === 0 || loading }}
+                disabled={productPage === 0 || loading}
+                onPress={() => changePage(productPage - 1)}
+                style={[styles.pageButton, (productPage === 0 || loading) && styles.pageButtonDisabled]}
               >
                 <Ionicons name="chevron-back" size={18} color={colors.forest} />
                 <Text style={styles.pageButtonText}>Anterior</Text>
               </Pressable>
-              <Text style={styles.pageIndicator}>Página {productPage} de {pageCount}</Text>
+              <Text style={styles.pageIndicator}>Página {productPage + 1} de {totalPages}</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Próxima página"
-                accessibilityState={{ disabled: productPage === pageCount }}
-                disabled={productPage === pageCount}
-                onPress={() => setProductPage((page) => page + 1)}
-                style={[styles.pageButton, productPage === pageCount && styles.pageButtonDisabled]}
+                accessibilityState={{ disabled: productPage + 1 >= totalPages || loading }}
+                disabled={productPage + 1 >= totalPages || loading}
+                onPress={() => changePage(productPage + 1)}
+                style={[styles.pageButton, (productPage + 1 >= totalPages || loading) && styles.pageButtonDisabled]}
               >
                 <Text style={styles.pageButtonText}>Próxima</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.forest} />
@@ -289,13 +303,14 @@ export function HomeScreen({ navigation }) {
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Filtrar por categoria</Text>
+            {categoryError ? <Text style={styles.modalError}>{categoryError}</Text> : null}
             <ScrollView>
               {[{ id: '', name: 'Todas as categorias' }, ...categories].map((category) => (
                 <Pressable
                   key={category.id || 'all'}
                   onPress={() => {
                     setCategoryId(category.id);
-                    setProductPage(1);
+                    setProductPage(0);
                     setCategoryPickerVisible(false);
                   }}
                   style={styles.modalOption}
@@ -326,7 +341,7 @@ export function HomeScreen({ navigation }) {
                 key={option.id}
                 onPress={() => {
                   setSortBy(option.id);
-                  setProductPage(1);
+                  setProductPage(0);
                   setSortPickerVisible(false);
                 }}
                 style={styles.modalOption}
@@ -412,15 +427,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   heroButtonText: { fontSize: 10 },
-  section: { marginTop: 48 },
-  productList: { paddingHorizontal: 20, gap: 16, paddingBottom: 4 },
-  noResults: {
-    marginHorizontal: 18,
-    paddingVertical: 20,
-    color: colors.muted,
-    fontFamily: typography.family.body,
-    fontSize: 13,
-  },
   brandsSection: { marginTop: 38 },
   brandList: { paddingHorizontal: 8, gap: 12 },
   brandCard: {
@@ -472,6 +478,8 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 20,
   },
+  productState: { alignItems: 'center', paddingVertical: 18 },
+  retryText: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 8 },
   productGrid: { paddingHorizontal: 16, gap: 12 },
   productGridRow: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
   gridPlaceholder: { flex: 1 },
@@ -521,6 +529,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 12,
   },
+  modalError: { color: colors.danger, fontSize: 11, marginBottom: 10 },
   modalOption: {
     minHeight: 46,
     flexDirection: 'row',
