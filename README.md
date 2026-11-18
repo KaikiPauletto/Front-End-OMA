@@ -18,12 +18,12 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 - `src/screens`: boas-vindas, login, cadastro, início, categorias, subcategorias, catálogo de produtos, detalhes, página institucional da OMA, sacola, checkout, pedidos e perfil.
 - `src/components`: componentes reutilizáveis de produto, quantidade e estados vazios.
 - `src/contexts/CartContext.js`: estado compartilhado da sacola.
-- `src/data/products.js`: dados demonstrativos ainda usados por fluxos de sacola e administração não integrados.
+- `src/data/products.js`: dados demonstrativos mantidos para fluxos locais que ainda não consomem a API.
 - `src/data/categories.js`: taxonomia demonstrativa mantida para fluxos que ainda não consomem a API.
 - `src/components/CartAddedBar.js`: confirmação visual após adicionar um produto à sacola.
 - `src/components/ProductImage.js`: exibe fotos dos produtos com fallback quando a origem remota não responde.
 - `src/services/apiClient.js`: cliente HTTP para a URL-base do API Gateway.
-- `src/services/productService.js`: listagem paginada, busca, filtros, ordenação, detalhe por ID, consultas públicas de categorias/subcategorias e criação/edição autenticadas de produtos.
+- `src/services/productService.js`: listagem pública paginada, busca, filtros, ordenação, detalhe por ID, consultas públicas de categorias/subcategorias e operações autenticadas de produtos, incluindo listagem e detalhe administrativos.
 - `src/services/authService.js`: integração dos fluxos de cadastro, login e logout com a API de autenticação.
 - `src/contexts/AuthContext.js`: usuário e token da sessão mantidos somente em memória.
 
@@ -31,7 +31,7 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 
 Copie `.env.example` para `.env` e ajuste `EXPO_PUBLIC_API_URL` para a URL-base do API Gateway fornecida pela equipe do backend. No Expo Go, configure um host acessível pelo dispositivo; `localhost` pode apontar para o próprio dispositivo. Variáveis `EXPO_PUBLIC_` ficam disponíveis no aplicativo e não devem conter segredos.
 
-Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. A listagem, busca, filtros por categoria/subcategoria e faixa de preço, ordenação e consulta de detalhes usam os endpoints públicos documentados em `API.md`. Administradores podem criar produtos em `POST /ws/products`, editar em `PUT /ws/products/{id}` e ativar/desativar em `PATCH /ws/products/{id}/status`, sempre com o JWT de administrador; categorias e subcategorias são carregadas pela API. Os cards administrativos oferecem atalho para edição. A imagem é opcional e deve ser informada como URL ou referência; upload de arquivo não está integrado. O cadastro de estoque é uma operação separada e continua fora desta etapa, portanto a criação no catálogo não registra saldo inicial.
+Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. A listagem pública, busca, filtros por categoria/subcategoria e faixa de preço, ordenação e consulta de detalhes usam os endpoints públicos documentados em `API.md`. Administradores podem criar produtos em `POST /ws/products`, editar em `PUT /ws/products/{id}`, ativar/desativar em `PATCH /ws/products/{id}/status` e consultar a aba Vendas por `GET /ws/products`, filtrando por `ACTIVE`, `INACTIVE` ou `ALL` (padrão `ACTIVE`). Os detalhes abertos pela aba Vendas usam `GET /ws/products/{id}`; ambas as consultas administrativas usam o JWT de administrador. Categorias e subcategorias são carregadas pela API. Os cards administrativos oferecem atalho para edição. A tela Vendas não exclui produtos nem exibe quantidades de estoque; o cadastro e a integração de estoque continuam fora desta etapa. A imagem é opcional e deve ser informada como URL ou referência; upload de arquivo não está integrado. A criação no catálogo não registra saldo inicial.
 
 Produtos `UNITÁRIO` permanecem limitados a uma unidade; produtos `QUANTITATIVO` respeitam o estoque e o limite máximo disponível no catálogo de demonstração. Essas verificações de interface não substituem a validação do backend.
 

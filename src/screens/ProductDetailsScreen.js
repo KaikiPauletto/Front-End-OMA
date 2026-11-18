@@ -30,6 +30,7 @@ import {
 } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
 import {
+  getAdminProductById,
   getProductById,
   setProductActive as setRemoteProductActive,
   updateProduct as updateRemoteProduct,
@@ -40,18 +41,27 @@ import { formatCurrency } from '../utils/formatCurrency';
 export function ProductDetailsScreen({ navigation, route }) {
   const { user, token } = useAuth();
   const isAdministrator = user?.role === 'ADMINISTRADOR';
+  const isAdminOrigin = isAdministrator && route.params?.source === 'admin';
   const { products: catalogProducts, updateProduct: updateCatalogProduct } = useProductCatalog();
   const { products: sellerProducts, updateProduct: updateSellerProduct } = useSellerProducts();
   const productId = route.params?.productId;
-  const catalogProduct = catalogProducts.find((item) => item.id === productId);
-  const sellerProduct = sellerProducts.find((item) => item.id === productId);
+  const catalogProduct = isAdminOrigin
+    ? null
+    : catalogProducts.find((item) => item.id === productId);
+  const sellerProduct = isAdminOrigin
+    ? null
+    : sellerProducts.find((item) => item.id === productId);
   const [apiProduct, setApiProduct] = useState(null);
+  const [apiProductAdminOrigin, setApiProductAdminOrigin] = useState(false);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const remoteProduct = apiProduct?.id === String(productId) ? apiProduct : null;
+  const remoteProduct = apiProduct?.id === String(productId) &&
+    apiProductAdminOrigin === isAdminOrigin
+    ? apiProduct
+    : null;
   const product = catalogProduct ?? sellerProduct ?? remoteProduct;
-  const isRemoteProduct = !catalogProduct && !sellerProduct;
+  const isRemoteProduct = isAdminOrigin || (!catalogProduct && !sellerProduct);
   const isSellerProduct = !catalogProduct && Boolean(sellerProduct);
   const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
   const [quantity, setQuantity] = useState(1);
@@ -80,10 +90,14 @@ export function ProductDetailsScreen({ navigation, route }) {
     setApiProduct(null);
     setApiError('');
     setApiLoading(true);
-    getProductById(productId)
+    const fetchProduct = isAdminOrigin
+      ? getAdminProductById(productId, token)
+      : getProductById(productId);
+    fetchProduct
       .then((result) => {
         if (active) {
           setApiProduct(result);
+          setApiProductAdminOrigin(isAdminOrigin);
         }
       })
       .catch((loadError) => {
@@ -100,7 +114,7 @@ export function ProductDetailsScreen({ navigation, route }) {
     return () => {
       active = false;
     };
-  }, [productId, catalogProduct?.id, sellerProduct?.id, reloadKey]);
+  }, [productId, catalogProduct?.id, sellerProduct?.id, isAdminOrigin, token, reloadKey]);
 
   const variant = product?.variants?.find((item) => item.id === variantId)
     ?? product?.variants?.[0]
@@ -260,9 +274,11 @@ export function ProductDetailsScreen({ navigation, route }) {
       try {
         await updateProductStatus(true);
       } catch (error) {
-        setProductStatusError(
-          error instanceof Error ? error.message : 'Não foi possível ativar o produto.',
-        );
+        setProductStatusError(error?.status === 409
+          ? 'Não é possível reativar este produto enquanto a categoria ou subcategoria estiver inativa.'
+          : error instanceof Error
+            ? error.message
+            : 'Não foi possível ativar o produto.');
       }
       return;
     }

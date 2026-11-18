@@ -32,6 +32,7 @@ function mapProduct(product) {
     typeof product.name !== 'string' ||
     typeof product.description !== 'string' ||
     !Number.isFinite(product.convertedPrice) ||
+    typeof product.active !== 'boolean' ||
     !['SINGLE_UNIT', 'MULTI_UNIT'].includes(product.productType)
   ) {
     throw new InvalidCatalogResponseError();
@@ -57,6 +58,25 @@ function mapProduct(product) {
 export async function getProductById(productId) {
   const response = await apiRequest(
     `/products/${encodeURIComponent(productId)}?targetCurrency=BRL`,
+  );
+  return mapProduct(response);
+}
+
+export async function getAdminProductById(productId, token) {
+  if (!hasIdentifier(productId)) {
+    throw new Error('O identificador do produto é inválido.');
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const response = await apiRequest(
+    `/ws/products/${encodeURIComponent(productId)}?targetCurrency=BRL`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
   );
   return mapProduct(response);
 }
@@ -202,6 +222,64 @@ export async function listProducts({
     size,
   });
   const response = await apiRequest(`/products?${query}`);
+
+  if (
+    !isRecord(response) ||
+    !Array.isArray(response.content) ||
+    !Number.isInteger(response.number) ||
+    !Number.isInteger(response.totalPages) ||
+    !Number.isFinite(response.totalElements)
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return {
+    products: response.content.map(mapProduct),
+    page: response.number,
+    totalPages: response.totalPages,
+    totalElements: response.totalElements,
+  };
+}
+
+export async function listAdminProducts({
+  name,
+  categoryId,
+  subcategoryId,
+  minPrice,
+  maxPrice,
+  status = 'ACTIVE',
+  sort = 'description,asc',
+  page = 0,
+  size = 10,
+  token,
+}) {
+  if (!['ACTIVE', 'INACTIVE', 'ALL'].includes(status)) {
+    throw new Error('O filtro de status deve ser ACTIVE, INACTIVE ou ALL.');
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const query = queryString({
+    name: name?.trim(),
+    categoryId,
+    subcategoryId,
+    minPrice,
+    maxPrice,
+    targetCurrency: 'BRL',
+    status,
+    sort,
+    page,
+    size,
+  });
+  const response = await apiRequest(
+    `/ws/products?${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
 
   if (
     !isRecord(response) ||

@@ -176,6 +176,8 @@ Sem corpo.
 
 Lista produtos ativos em páginas. Também exclui produtos cuja subcategoria ou categoria esteja inativa.
 
+Este endpoint não aceita filtro de status: um parâmetro `status` enviado aqui é ignorado e o resultado continua contendo somente produtos ativos. Para listar produtos inativos, use [`GET /ws/products`](#listar-produtos-administrador-incluindo-inativos) (administrador).
+
 **Autenticação:** Não.
 
 **Headers:** `Accept: application/json` recomendado.
@@ -216,6 +218,7 @@ Retorna uma página Spring Data. `price` é o valor original e `convertedPrice` 
       "currency": "BRL",
       "price": 75.0,
       "image": "https://example.com/cuia.jpg",
+      "images": [],
       "subcategoryId": 7,
       "subcategoryName": "Porongo",
       "categoryId": 2,
@@ -257,6 +260,8 @@ Retorna uma página Spring Data. `price` é o valor original e `convertedPrice` 
 
 Retorna um produto ativo, desde que sua subcategoria e categoria também estejam ativas.
 
+Para consultar um produto inativo, use [`GET /ws/products/{id}`](#buscar-produto-por-id-administrador-incluindo-inativo) (administrador).
+
 **Autenticação:** Não.
 
 **Headers:** `Accept: application/json` recomendado.
@@ -274,7 +279,7 @@ GET /products/17?targetCurrency=USD
 
 **Sucesso — `200 OK`**
 
-Mesmo formato do item em [listar produtos](#listar-pesquisar-filtrar-e-ordenar-produtos). Se a conversão do detalhe falhar, o serviço atualmente retorna o produto com `convertedPrice: -1` e registra a falha no campo `environment`.
+Mesmo formato do item em [listar produtos](#listar-pesquisar-filtrar-e-ordenar-produtos). O campo `image` é a URL da imagem principal; sem imagens enviadas, mantém o valor legado da coluna `image` (ou `null`). `images` lista as imagens enviadas por [upload](#imagens-do-produto), ordenadas por `position` (lista vazia quando não houver). Se a conversão do detalhe falhar, o serviço atualmente retorna o produto com `convertedPrice: -1` e registra a falha no campo `environment`.
 
 ```json
 {
@@ -285,7 +290,15 @@ Mesmo formato do item em [listar produtos](#listar-pesquisar-filtrar-e-ordenar-p
   "description": "Cuia de porongo",
   "currency": "BRL",
   "price": 75.0,
-  "image": "https://example.com/cuia.jpg",
+  "image": "https://<projeto>.supabase.co/storage/v1/object/public/product-images/products/17/3f1c...png",
+  "images": [
+    {
+      "id": 4,
+      "url": "https://<projeto>.supabase.co/storage/v1/object/public/product-images/products/17/3f1c...png",
+      "isPrimary": true,
+      "position": 1
+    }
+  ],
   "subcategoryId": 7,
   "subcategoryName": "Porongo",
   "categoryId": 2,
@@ -347,7 +360,7 @@ Cria um produto ativo. A subcategoria informada precisa existir e estar ativa, a
 
 **Sucesso — `201 Created`**
 
-Retorna a entidade de produto criada, incluindo a associação `subcategory`.
+Retorna a entidade de produto criada, incluindo a associação `subcategory`. O campo `image` traz a URL da imagem principal (ou o valor legado da coluna, ou `null`) e `images` lista as imagens enviadas por [upload](#imagens-do-produto) (vazia em um produto recém-criado).
 
 ```json
 {
@@ -376,7 +389,8 @@ Retorna a entidade de produto criada, incluindo a associação `subcategory`.
     "active": true,
     "createdAt": "2026-01-15T12:00:00Z",
     "updatedAt": "2026-01-15T12:00:00Z"
-  }
+  },
+  "images": []
 }
 ```
 
@@ -410,7 +424,7 @@ Atualiza os campos editáveis do produto. O request é efetivamente completo: en
 | `description` | string | Sim | Descrição não vazia. |
 | `currency` | string | Sim | Código de moeda não vazio. |
 | `price` | number (`BigDecimal`) | Sim | Preço positivo. |
-| `image` | string ou `null` | Não | Imagem; nulo remove o valor atual. |
+| `image` | string ou `null` | Não | URL legada da imagem; nulo remove o valor atual. Só aparece como `image` enquanto o produto não tiver imagens enviadas por [upload](#imagens-do-produto). |
 | `subcategoryId` | integer (`Long`) | Sim | Subcategoria ativa e de categoria ativa. |
 
 ```json
@@ -477,6 +491,169 @@ Retorna a entidade do produto com `active` atualizado. Exemplo: o mesmo objeto d
 | `404 Not Found` | Produto não encontrado. | `"Produto não encontrado"` |
 | `409 Conflict` | Tentativa de reativar com categoria ou subcategoria inativa. | `"Não é possível reativar um produto com categoria ou subcategoria inativa"` |
 | `500 Internal Server Error` | Falha inesperada no serviço. | `"Ops!!! Algo deu errado. - <mensagem>"` (texto simples) |
+
+### Listar produtos (administrador), incluindo inativos
+
+**`GET /ws/products`**
+
+Mesma listagem paginada de [`GET /products`](#listar-pesquisar-filtrar-e-ordenar-produtos), com os mesmos filtros, paginação, ordenação e formato de resposta, mais o filtro `status`. Sem `status`, o resultado é idêntico ao do catálogo público.
+
+**Autenticação:** Sim — Bearer Token de administrador.
+
+**Headers:** `Authorization: Bearer <jwt>` obrigatório; `Accept: application/json` recomendado.
+
+**Query parameters:** todos os de `GET /products` (`name`, `categoryId`, `subcategoryId`, `minPrice`, `maxPrice`, `targetCurrency`, `page`, `size`, `sort`), mais:
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|---|---|---:|---|
+| `status` | string | Não | `ACTIVE`, `INACTIVE` ou `ALL`. Padrão: `ACTIVE`. |
+
+Semântica do `status`:
+
+| Valor | Produtos retornados |
+|---|---|
+| `ACTIVE` (padrão) | Produto, subcategoria e categoria ativos — exatamente o mesmo critério de `GET /products`. |
+| `INACTIVE` | Produtos com `active = false`, independentemente do status da subcategoria/categoria. |
+| `ALL` | Todos os produtos, sem filtro de ativo. |
+
+Um produto com `active = true` cuja categoria ou subcategoria esteja inativa **não** aparece em `ACTIVE` nem em `INACTIVE`; ele aparece **somente** em `ALL`. O campo `active` da resposta reflete apenas o status do próprio produto (o mesmo alterado por `PATCH /ws/products/{id}/status`); use `categoryId`/`subcategoryId` para conferir o status da classificação.
+
+O `status` combina com todos os outros filtros, e `totalElements`/`totalPages` refletem o filtro aplicado.
+
+```http
+GET /ws/products?status=INACTIVE&name=cuia&categoryId=2&sort=name,asc&page=0&size=10
+Authorization: Bearer <jwt>
+```
+
+**Sucesso — `200 OK`**
+
+Mesmo formato de página de `GET /products`. Exemplo de item de produto inativo:
+
+```json
+{
+  "content": [
+    {
+      "id": 18,
+      "name": "Cuia descontinuada",
+      "brand": "Marca Gaúcha",
+      "model": "CU-02",
+      "description": "Cuia de porongo",
+      "currency": "BRL",
+      "price": 80.0,
+      "image": "https://example.com/cuia-2.jpg",
+      "images": [],
+      "subcategoryId": 7,
+      "subcategoryName": "Porongo",
+      "categoryId": 2,
+      "categoryName": "Cuias",
+      "productType": "SINGLE_UNIT",
+      "active": false,
+      "environment": "Product API running in port 8080",
+      "promotionMessage": "Nenhuma Promoção Ativa",
+      "targetCurrency": "BRL",
+      "convertedPrice": 80.0
+    }
+  ],
+  "totalElements": 1,
+  "totalPages": 1,
+  "number": 0,
+  "size": 10
+}
+```
+
+**Erros comuns**
+
+| Status | Quando ocorre | Exemplo de corpo atual |
+|---|---|---|
+| `400 Bad Request` | `status` fora de `ACTIVE`/`INACTIVE`/`ALL`, outro parâmetro com tipo inválido, faixa de preço inválida ou ordenação não suportada. | `"Parâmetro inválido: status"` (texto simples) |
+| `401 Unauthorized` | Token Bearer ausente, inválido ou revogado. | Sem corpo no Gateway. |
+| `403 Forbidden` | Usuário autenticado sem permissão administrativa (qualquer valor de `status`). | `"Usuário sem permissão para esta operação"` |
+| `503 Service Unavailable` | Conversão para BRL indisponível para filtro/ordenação por preço. | `"Não foi possível converter os preços para BRL"` |
+| `500 Internal Server Error` | Falha inesperada no serviço. | `"Ops!!! Algo deu errado. - <mensagem>"` (texto simples) |
+
+### Buscar produto por ID (administrador), incluindo inativo
+
+**`GET /ws/products/{id}`**
+
+Retorna o produto mesmo que ele, sua subcategoria ou sua categoria estejam inativos. O formato da resposta é o mesmo de [`GET /products/{id}`](#buscar-produto-por-id); `active` indica o status do produto.
+
+**Autenticação:** Sim — Bearer Token de administrador.
+
+**Headers:** `Authorization: Bearer <jwt>` obrigatório; `Accept: application/json` recomendado.
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---:|---|
+| `id` | integer (`Long`) | Sim | ID do produto no path. |
+| `targetCurrency` | string | Não | Moeda de `convertedPrice`. Padrão: `BRL`. |
+
+```http
+GET /ws/products/18?targetCurrency=BRL
+Authorization: Bearer <jwt>
+```
+
+**Sucesso — `200 OK`**: o objeto de produto, com `"active": false` quando o produto está desativado.
+
+**Erros comuns**
+
+| Status | Quando ocorre | Exemplo de corpo atual |
+|---|---|---|
+| `400 Bad Request` | ID não numérico. | `"Parâmetro inválido: id"` (texto simples) |
+| `401 Unauthorized` | Token Bearer ausente, inválido ou revogado. | Sem corpo no Gateway. |
+| `403 Forbidden` | Usuário autenticado sem permissão administrativa. | `"Usuário sem permissão para esta operação"` |
+| `404 Not Found` | Produto não existe. | `"Produto não encontrado"` (texto simples) |
+| `500 Internal Server Error` | Falha inesperada no serviço. | `"Ops!!! Algo deu errado. - <mensagem>"` (texto simples) |
+
+### Imagens do produto
+
+Imagens enviadas pelo administrador e armazenadas no Supabase Storage (API compatível com S3). O banco guarda apenas a chave do objeto (`products/{productId}/{uuid}.{ext}`); a URL pública é montada como `{STORAGE_PUBLIC_BASE_URL}/{chave}`.
+
+Regras:
+
+- Formatos aceitos: JPEG, PNG e WebP, identificados pelo conteúdo (magic bytes), não pela extensão nem pelo `Content-Type` enviado. O arquivo é gravado no storage com o `Content-Type` detectado.
+- Até 5 MB por imagem e 8 imagens por produto (configuráveis por `app.images.max-size-bytes` e `app.images.max-per-product`).
+- A primeira imagem enviada vira a principal; há no máximo uma principal por produto.
+- Ao remover a principal, a próxima imagem (menor `position`) é promovida.
+- O campo `image` das respostas de produto e dos snapshots de carrinho e pedido é a URL da imagem principal; sem imagens, continua com o valor legado.
+
+**Autenticação:** Sim — Bearer Token de administrador em todos os endpoints abaixo.
+
+| Método | Endpoint | Descrição | Sucesso |
+|---|---|---|---|
+| POST | `/ws/products/{id}/images` | Envia uma imagem (`multipart/form-data`, campo `file`). | `201 Created` |
+| GET | `/ws/products/{id}/images` | Lista as imagens do produto, ordenadas por `position`. | `200 OK` |
+| PATCH | `/ws/products/{id}/images/{imageId}/primary` | Define a imagem principal. | `200 OK` |
+| DELETE | `/ws/products/{id}/images/{imageId}` | Remove a imagem (linha e arquivo). | `204 No Content` |
+
+```bash
+curl -X POST http://localhost:8080/ws/products/17/images \
+  -H "Authorization: Bearer <jwt>" \
+  -F "file=@cuia.png"
+```
+
+**Resposta do upload e do PATCH (mesmo formato de cada item da listagem)**
+
+```json
+{
+  "id": 4,
+  "url": "https://<projeto>.supabase.co/storage/v1/object/public/product-images/products/17/3f1c...png",
+  "isPrimary": true,
+  "position": 1
+}
+```
+
+**Erros comuns**
+
+| Status | Quando ocorre | Exemplo de corpo atual |
+|---|---|---|
+| `400 Bad Request` | Campo `file` ausente ou vazio, ou conteúdo que não é JPEG/PNG/WebP. | `"Formato de imagem não suportado. Envie JPEG, PNG ou WebP."` |
+| `401 Unauthorized` | Token Bearer ausente, inválido ou revogado. | Sem corpo no Gateway. |
+| `403 Forbidden` | Usuário autenticado sem permissão administrativa. | `"Usuário sem permissão para esta operação"` |
+| `404 Not Found` | Produto ou imagem não encontrados (inclusive imagem de outro produto). | `"Produto não encontrado."` / `"Imagem não encontrada."` |
+| `409 Conflict` | O produto já tem o número máximo de imagens. | `"Limite de 8 imagens por produto atingido."` |
+| `413 Payload Too Large` | Imagem acima do limite. | `"A imagem excede o tamanho máximo de 5 MB."` |
+| `502 Bad Gateway` | Falha ao enviar o arquivo ao armazenamento. | `"Falha ao enviar a imagem ao armazenamento."` |
+
+Se a gravação no banco falhar após o envio, o arquivo é removido do armazenamento. Na remoção, a linha é apagada primeiro; uma falha ao apagar o arquivo é apenas registrada em log.
 
 ## Categorias e subcategorias
 
@@ -1010,7 +1187,7 @@ Retorna o pedido com endereço, itens e dados de catálogo persistidos, valores 
 | `400 Bad Request` | Lista vazia, mais de 100 itens, IDs ou quantidades inválidas, IDs duplicados, endereço/UF/CEP inválido ou chave de idempotência maior que 128 caracteres. |
 | `403 Forbidden` | Usuário autenticado sem perfil de cliente. |
 | `409 Conflict` | Estoque insuficiente, chave repetida com conteúdo diferente ou reserva não ativa. O pedido provisório é removido nas rejeições definitivas de estoque. |
-| `422 Unprocessable Entity` | Produto não encontrado ou inativo no catálogo. |
+| `422 Unprocessable Entity` | Produto não encontrado ou inativo no catálogo, produto sem estoque cadastrado no Inventory API (`"Produto sem estoque cadastrado no inventário."`) ou reserva recusada pelo Inventory API como inválida (`"Reserva de estoque recusada pelo inventário."`). Nos casos de estoque, o pedido provisório é removido. |
 | `502 Bad Gateway` / `503 Service Unavailable` | Falha de integração. Se o resultado da reserva for incerto, repita a mesma requisição com a mesma `Idempotency-Key`; o pedido fica recuperável e a operação de reserva é idempotente por `orderId`. |
 
 Sem `Idempotency-Key`, repetir uma requisição após timeout pode criar outro pedido. Clientes devem gerar uma chave por intenção de compra e reutilizá-la em todas as tentativas daquela mesma operação. A chave considera os itens e o endereço; reutilizá-la com qualquer conteúdo diferente resulta em conflito.
@@ -1046,11 +1223,11 @@ As operações administrativas exigem JWT de usuário com perfil Admin. O Gatewa
 
 A listagem aceita `status`, `customerId`, `orderId`, `createdFrom`, `createdTo`, `confirmedFrom` e `confirmedTo`, além dos parâmetros de paginação e ordenação (`page`, `size`, `sort`). O tamanho padrão é 20 e o máximo é 100. As datas devem ser timestamps ISO-8601.
 
-O detalhe administrativo inclui cliente, itens/snapshots, endereço, valores, estado e dados da reserva. `paymentDataAvailable` é `false`: não existe integração nem registro de pagamento neste repositório, e a API não inventa informações de pagamento. Um pedido `PENDING_PAYMENT` pode ser cancelado se a reserva for liberada. Um pedido confirmado não pode ser cancelado (`409 Conflict`) até existir uma política de estorno.
+O detalhe administrativo inclui cliente, itens/snapshots, endereço, valores, estado e dados da reserva. `paymentDataAvailable` é `false`: o Order API não guarda dados de pagamento (eles ficam no Payment API, ver [Pagamentos](#pagamentos)), e a API não inventa informações de pagamento. Um pedido `PENDING_PAYMENT` pode ser cancelado se a reserva for liberada. Um pedido confirmado não pode ser cancelado (`409 Conflict`) até existir uma política de estorno.
 
-### Transições internas e pagamento futuro
+### Transições internas e pagamento
 
-Um serviço confiável deve chamar diretamente o Order API pela rede interna com `X-Service-Token`. O endpoint de confirmação só deve ser chamado pelo fluxo responsável depois que o pagamento tiver sido aprovado; não existe Payment API neste repositório. O segredo não deve ser enviado ao aplicativo cliente.
+Um serviço confiável deve chamar diretamente o Order API pela rede interna com `X-Service-Token`. O endpoint de confirmação só deve ser chamado pelo fluxo responsável depois que o pagamento tiver sido aprovado: esse fluxo é o Payment API, que chama `confirm` ao receber do Stripe a notificação de pagamento aprovado e `cancel` quando o pagamento é recusado ou a sessão expira (ver [Pagamentos](#pagamentos)). O segredo não deve ser enviado ao aplicativo cliente; pelo Gateway, essas rotas respondem `401 Unauthorized`.
 
 | Método e rota interna | Efeito |
 |---|---|
@@ -1066,6 +1243,25 @@ Estados de pedido utilizados: `RESERVATION_PENDING` durante a coordenação inic
 **`GET /ws/orders/internal/analytics?updatedAfter={timestamp}`**
 
 Disponível somente na rede interna e protegido por `X-Service-Token`; não deve ser exposto como rota de cliente. A resposta é paginada (`page`, `size`, `sort`; padrão de 100 registros, máximo de 100) e inclui os dados históricos persistidos do pedido, inclusive `customerId`. `updatedAfter` é obrigatório e inclusivo, retornando pedidos atualizados naquele instante ou depois dele, permitindo capturar mudanças de status além da criação. O consumidor deve avançar a paginação e deduplicar registros na fronteira do instante de atualização.
+
+### Consulta interna para pagamentos
+
+**`GET /ws/orders/internal/{orderId}/payment-info`**
+
+Contrato mínimo usado pelo Payment API para validar o pedido antes de iniciar um pagamento. Disponível somente na rede interna e protegido por `X-Service-Token`; pelo Gateway, um cliente recebe `401 Unauthorized`. Pedido inexistente retorna `404 Not Found`.
+
+```json
+{
+  "id": 42,
+  "customerId": 7,
+  "status": "PENDING_PAYMENT",
+  "totalAmount": 149.90,
+  "currency": "BRL",
+  "reservationExpiresAt": "2026-11-18T12:10:00Z"
+}
+```
+
+A resposta contém apenas esses campos: dono do pedido, estado, valor total (com frete), moeda e validade da reserva de estoque.
 
 ## Carrinho
 
@@ -1510,3 +1706,145 @@ Executa a coleta imediatamente, sem aguardar o próximo ciclo, por exemplo depoi
 | `401 Unauthorized` | Requisição sem JWT válido ou que não passou pelo Gateway. |
 | `403 Forbidden` | Usuário autenticado sem perfil de administrador. |
 | `500 Internal Server Error` | O Analytics API está indisponível. Checkout e pedidos não são afetados. |
+
+## Pagamentos
+
+O `payment-api` integra a loja ao **Stripe Checkout em modo de teste**. Ele inicia o pagamento de um pedido, acompanha o estado do pagamento e comunica o resultado ao `order-api`. O Order API não conhece o provedor: a integração fica isolada no Payment API, atrás de uma interface que permite trocar o provedor.
+
+Regras gerais:
+
+- O valor e a moeda vêm **sempre** do Order API (`totalAmount`, com frete). O frontend não envia preço nem total.
+- O cliente paga na página hospedada do Stripe (`checkoutUrl`); a loja nunca recebe dados de cartão.
+- O pagamento só é aprovado pelo **webhook** assinado do Stripe. O retorno do navegador para a página de sucesso **não** aprova nada: o frontend apenas consulta o status.
+- A chave secreta do Stripe fica somente no servidor, em variável de ambiente, e precisa ser de teste (`sk_test_` ou `rk_test_`).
+
+### Fluxo recomendado
+
+1. Crie o pedido em `POST /ws/orders`. Ele fica `PENDING_PAYMENT` com reserva de estoque de 10 minutos.
+2. Chame `POST /ws/payments/orders/{orderId}/checkout-session` e redirecione o cliente para o `checkoutUrl` recebido.
+3. Ao terminar, o Stripe redireciona o cliente para a página de sucesso (com `session_id`) ou de cancelamento do frontend.
+4. Em paralelo, o Stripe notifica o webhook. O Payment API confirma o pedido no Order API e marca o pagamento como `APPROVED`.
+5. Na página de sucesso, consulte `GET /ws/payments/orders/{orderId}` até o status deixar de ser `PENDING`.
+
+### Iniciar pagamento
+
+**`POST /ws/payments/orders/{orderId}/checkout-session`**
+
+Exige JWT de cliente. Não tem corpo.
+
+```http
+POST /ws/payments/orders/42/checkout-session
+Authorization: Bearer <token>
+```
+
+**Resposta `200 OK`:**
+
+```json
+{
+  "paymentId": 15,
+  "orderId": 42,
+  "status": "PENDING",
+  "checkoutUrl": "https://checkout.stripe.com/c/pay/cs_test_..."
+}
+```
+
+Comportamento:
+
+- Valida no Order API que o pedido existe, pertence ao cliente, está `PENDING_PAYMENT` e tem pelo menos `payment.min-reservation-seconds` (padrão 120 segundos) de reserva restante.
+- Cria uma sessão do Stripe Checkout (somente cartão, um item "Pedido #{orderId}" com o total do pedido) válida por cerca de 30 minutos, o mínimo aceito pelo Stripe.
+- Se já existe um pagamento aberto para o pedido, devolve o mesmo `checkoutUrl`, sem criar outra sessão. Se esse pagamento aberto não serve mais (pedido não mais pendente, ou reserva com menos de `payment.min-reservation-seconds` restantes), a sessão é expirada no Stripe, o pagamento passa a `CANCELLED` e as regras acima são reavaliadas; com a reserva no fim, a resposta é `409 Conflict`.
+- Repetir a chamada é seguro: há no máximo um pagamento aberto por pedido, inclusive com requisições simultâneas.
+
+| Status | Quando ocorre |
+|---|---|
+| `200 OK` | Sessão criada, ou sessão aberta existente reaproveitada. |
+| `401 Unauthorized` | Sem JWT válido. |
+| `403 Forbidden` | Usuário autenticado que não é cliente. |
+| `404 Not Found` | Pedido inexistente ou de outro cliente. |
+| `409 Conflict` | Pedido não está `PENDING_PAYMENT`, a reserva expira em menos de 2 minutos, outra requisição está criando o pagamento neste instante, ou o checkout anterior já foi concluído e está em processamento. |
+| `502 Bad Gateway` | Stripe ou Order API indisponível. Se a falha foi do Stripe, a tentativa é registrada como `FAILED` e uma nova chamada cria outra. |
+
+### Consultar pagamento
+
+**`GET /ws/payments/orders/{orderId}`**
+
+Exige JWT de cliente. Retorna o pagamento mais recente do pedido do cliente. O frontend usa esta rota para acompanhar o resultado; ela nunca altera o status.
+
+```json
+{
+  "paymentId": 15,
+  "orderId": 42,
+  "status": "APPROVED",
+  "amount": 149.90,
+  "currency": "BRL",
+  "checkoutUrl": null,
+  "createdAt": "2026-11-18T12:00:05Z",
+  "updatedAt": "2026-11-18T12:01:40Z",
+  "confirmedAt": "2026-11-18T12:01:40Z"
+}
+```
+
+`checkoutUrl` só vem preenchido enquanto o pagamento está `PENDING`. Sem pagamento para o pedido, ou pedido de outro cliente: `404 Not Found`.
+
+### Estados e transições
+
+Os estados do pagamento são próprios e separados dos estados do pedido. As transições são controladas pelo backend a partir dos eventos validados do Stripe; estados finais não mudam, e eventos atrasados ou duplicados são ignorados. A única exceção é a aprovação que chega para um pagamento já `FAILED`, `EXPIRED` ou `CANCELLED`: o valor foi capturado e não será honrado, então é estornado e o pagamento passa a `REFUNDED`.
+
+| Estado | Significado |
+|---|---|
+| `CREATED` | Tentativa registrada; a sessão no Stripe está sendo criada. |
+| `PENDING` | Sessão criada; aguardando o cliente ou a confirmação do Stripe. |
+| `APPROVED` | Pago e pedido confirmado. Final. |
+| `FAILED` | Falha ao criar a sessão ou pagamento recusado. Final (salvo estorno). |
+| `EXPIRED` | Sessão expirou sem pagamento. Final (salvo estorno). |
+| `CANCELLED` | Substituído por um novo checkout porque o anterior não servia mais. Final (salvo estorno). |
+| `REFUNDED` | Pago depois que o pedido deixou de aceitar pagamento; estornado. Final. |
+
+| De | Para |
+|---|---|
+| `CREATED` | `PENDING`, `FAILED`, `CANCELLED` |
+| `PENDING` | `APPROVED`, `FAILED`, `EXPIRED`, `CANCELLED`, `REFUNDED` |
+| `FAILED`, `EXPIRED`, `CANCELLED` | `REFUNDED` (somente ao receber aprovação depois do encerramento) |
+
+### Webhook do Stripe
+
+**`POST /payments/webhook`**
+
+Rota pública (sem JWT), chamada somente pelo Stripe e autenticada pela assinatura do cabeçalho `Stripe-Signature`. O Gateway encaminha o corpo e o cabeçalho sem alterações. Apenas esta rota fora de `/ws/` é exposta para o Payment API.
+
+| Evento | Efeito |
+|---|---|
+| `checkout.session.completed` | Se `payment_status` é `paid`, segue o fluxo de aprovação. Caso contrário, mantém `PENDING` aguardando o resultado assíncrono. |
+| `checkout.session.async_payment_succeeded` | Fluxo de aprovação. |
+| `checkout.session.async_payment_failed` | `FAILED` e cancelamento do pedido para liberar o estoque. |
+| `checkout.session.expired` | `EXPIRED` e cancelamento do pedido para liberar o estoque. |
+| Outros | Registrados e ignorados. |
+
+**Fluxo de aprovação:** o Payment API chama `POST /ws/orders/{orderId}/confirm` e confere o **status no corpo** da resposta. Só com `CONFIRMED` o pagamento passa a `APPROVED`. Se o pedido não puder mais ser confirmado, aplica-se o tratamento de pagamento tardio (abaixo).
+
+Garantias:
+
+- O identificador de cada evento é gravado em `processed_stripe_event` na mesma transação do processamento. Um evento repetido responde `200 OK` sem ser reprocessado.
+- O pagamento é localizado pelo id da sessão ou, se necessário, pelo `payment_id` enviado na metadata. Evento de sessão desconhecida responde `200 OK` e é apenas registrado em log.
+- Se o Order API ou o Stripe estiverem indisponíveis (ou o `confirm` responder `404`), o webhook responde `500` e a transação inteira é desfeita, inclusive o registro do evento. O Stripe reenvia o evento, e as chamadas ao Order API são idempotentes.
+- Um pedido já confirmado não é confirmado de novo, e um `409` no cancelamento de pedido confirmado é apenas registrado em log.
+
+| Status | Quando ocorre |
+|---|---|
+| `200 OK` | Evento processado, duplicado, ignorado ou de sessão desconhecida. |
+| `400 Bad Request` | Assinatura ausente ou inválida, ou corpo que não é um evento do Stripe. |
+| `500 Internal Server Error` | Falha de infraestrutura; nada é gravado e o Stripe reenviará. |
+
+### Pagamento aprovado tardiamente
+
+A reserva de estoque dura 10 minutos, mas a sessão do Stripe dura no mínimo 30. O cliente pode, portanto, pagar depois que a reserva expirou. Nesse caso o pedido não pode ser confirmado sem estoque:
+
+1. O `confirm` do Order API responde `200` com status `EXPIRED` ou `CANCELLED`, ou `409 Conflict`.
+2. O Payment API estorna o valor inteiro no Stripe (pela transação do pagamento, com chave de idempotência por pagamento, sem estorno duplicado em reenvios).
+3. O pagamento passa a `REFUNDED` e o pedido continua sem confirmação. O cliente pode fazer um novo pedido.
+
+Para reduzir esse caso, nenhuma sessão é criada nem reaproveitada quando a reserva tem menos de 2 minutos restantes, e uma sessão aberta de pedido vencido é expirada no Stripe na próxima tentativa de pagamento.
+
+O mesmo estorno acontece se a aprovação chegar para um pagamento já `FAILED`, `EXPIRED` ou `CANCELLED`: o caso é registrado em log de erro, o pedido não é confirmado e o pagamento passa a `REFUNDED`. O estorno é idempotente: se o Stripe informar que a cobrança já foi totalmente estornada (`charge_already_refunded`), o resultado é tratado como sucesso.
+
+**Limitação conhecida:** não há job de reconciliação. Se o estorno ou a confirmação falharem de forma permanente (por exemplo, o Stripe recusa o estorno ou o Order API responde sempre erro), o webhook responde `500` a cada tentativa e o Stripe reenvia o evento por cerca de 3 dias. Durante esse tempo o pagamento continua `PENDING`; se o problema não se resolver, o caso exige intervenção manual (conferir o pagamento no painel do Stripe, estornar ou confirmar o pedido e reenviar o evento).
