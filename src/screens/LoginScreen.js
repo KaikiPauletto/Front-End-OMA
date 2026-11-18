@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -19,6 +18,7 @@ export function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const submitLock = useRef(false);
   const { signIn } = useAuth();
 
@@ -28,17 +28,18 @@ export function LoginScreen({ navigation }) {
     }
 
     if (!email.trim() || !password) {
-      Alert.alert('Dados incompletos', 'Informe seu e-mail e sua senha.');
+      setErrorMessage('Informe seu e-mail e sua senha.');
       return;
     }
 
+    setErrorMessage('');
     submitLock.current = true;
     setIsSubmitting(true);
     try {
       await signIn(email.trim(), password);
       setPassword('');
     } catch (error) {
-      Alert.alert('Não foi possível entrar', getAuthErrorMessage(error, 'signin'));
+      setErrorMessage(getAuthErrorMessage(error, 'signin'));
     } finally {
       submitLock.current = false;
       setIsSubmitting(false);
@@ -67,7 +68,10 @@ export function LoginScreen({ navigation }) {
         <TextInput
           autoCapitalize="none"
           keyboardType="email-address"
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            setErrorMessage('');
+          }}
           placeholder="voce@email.com"
           placeholderTextColor={colors.muted}
           editable={!isSubmitting}
@@ -76,7 +80,10 @@ export function LoginScreen({ navigation }) {
         />
         <Text style={styles.label}>Senha</Text>
         <TextInput
-          onChangeText={setPassword}
+          onChangeText={(value) => {
+            setPassword(value);
+            setErrorMessage('');
+          }}
           placeholder="Sua senha"
           placeholderTextColor={colors.muted}
           secureTextEntry
@@ -84,6 +91,11 @@ export function LoginScreen({ navigation }) {
           style={styles.input}
           value={password}
         />
+        {errorMessage ? (
+          <Text accessibilityLiveRegion="polite" style={styles.error}>
+            {errorMessage}
+          </Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
@@ -127,6 +139,13 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 26, fontWeight: '800', textAlign: 'center', marginTop: 20 },
   subtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 29 },
   label: { color: colors.ink, fontSize: 12, fontWeight: '700', marginBottom: 7 },
+  error: {
+    color: colors.clay,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -7,
+    marginBottom: 12,
+  },
   input: {
     height: 50,
     borderRadius: 14,
