@@ -26,7 +26,11 @@ export function AppHeader({
             hitSlop={10}
             style={styles.sideButton}
           >
-            <Ionicons name="arrow-back" size={21} color={colors.forest} />
+            <Ionicons
+              name="arrow-back"
+              size={21}
+              color={tone === 'forest' ? colors.white : colors.forest}
+            />
           </Pressable>
         ) : (
           <Text style={styles.logo}>oma<Text style={styles.logoDot}>.</Text></Text>
