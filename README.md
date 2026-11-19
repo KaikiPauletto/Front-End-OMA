@@ -38,7 +38,7 @@ Produtos `UNITÁRIO` permanecem limitados a uma unidade; produtos `QUANTITATIVO`
 
 ## Fluxo de acesso
 
-Ao iniciar sem sessão, o aplicativo abre a tela **Bem-vindo**, com opções de login e cadastro. O cadastro envia nome, e-mail e senha ao API Gateway e, após sucesso, direciona para o login. O login valida as credenciais no backend e mantém o usuário e o JWT em memória. Ao sair, o aplicativo tenta revogar o token no Gateway e encerra a sessão local; se não houver confirmação do servidor, informa essa condição sem afirmar que a revogação ocorreu.
+Ao iniciar sem sessão, o aplicativo abre a tela **Bem-vindo**, com opções de login e cadastro. O cadastro envia nome, e-mail e senha ao API Gateway; após a confirmação de sucesso, direciona diretamente para o login com o e-mail preenchido e uma mensagem de confirmação. O cadastro não autentica automaticamente. O login valida as credenciais no backend e mantém o usuário e o JWT em memória. Ao sair, o aplicativo tenta revogar o token no Gateway e encerra a sessão local; se não houver confirmação do servidor, informa essa condição sem afirmar que a revogação ocorreu.
 
 
 ## Padrão visual e navegação atualizados

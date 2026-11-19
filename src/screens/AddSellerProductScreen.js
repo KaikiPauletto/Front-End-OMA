@@ -129,9 +129,19 @@ export function AddSellerProductScreen({ navigation }) {
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [submitError, setSubmitError] = useState('');
   const [workflowStatus, setWorkflowStatus] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLock = useRef(false);
+  const successTimerRef = useRef(null);
+  const successMessageIdRef = useRef(0);
   const isFormLocked = isSubmitting || Boolean(workflowStatus);
+
+  useEffect(() => () => {
+    successMessageIdRef.current += 1;
+    if (successTimerRef.current !== null) {
+      clearTimeout(successTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -184,10 +194,33 @@ export function AddSellerProductScreen({ navigation }) {
     };
   }
 
+  function clearSuccessFeedback() {
+    successMessageIdRef.current += 1;
+    if (successTimerRef.current !== null) {
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = null;
+    }
+    setSuccessMessage(null);
+  }
+
+  function showSuccessFeedback(productId, quantity) {
+    const messageId = successMessageIdRef.current + 1;
+    successMessageIdRef.current = messageId;
+    setSuccessMessage({ productId, quantity });
+    successTimerRef.current = setTimeout(() => {
+      if (successMessageIdRef.current === messageId) {
+        setSuccessMessage(null);
+        successTimerRef.current = null;
+      }
+    }, 20000);
+  }
+
   async function handleSubmit() {
     if (submitLock.current) {
       return;
     }
+
+    clearSuccessFeedback();
 
     const parsedPrice = parsePrice(price);
     const subcategoryId = Number(selectedSubcategory?.id);
@@ -296,13 +329,20 @@ export function AddSellerProductScreen({ navigation }) {
         }
       }
 
-      setWorkflowStatus({
-        status: 'complete',
-        stage: 'complete',
-        productId,
-        productType,
-        quantity,
-      });
+      setName('');
+      setBrand('');
+      setModel('');
+      setPrice('');
+      setDescription('');
+      setImageUrl('');
+      setSelectedSubcategory(null);
+      setProductType('');
+      setInitialQuantity('');
+      setSubcategoryPickerVisible(false);
+      setSubmitError('');
+      setWorkflowStatus(null);
+      showSuccessFeedback(productId, quantity);
+      keepSubmitLocked = false;
     } catch (error) {
       if (isDefinitiveRequestRejection(error, 'productCreation')) {
         setSubmitError(getErrorMessage(error));
@@ -501,49 +541,46 @@ export function AddSellerProductScreen({ navigation }) {
         />
 
         {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
+        {successMessage ? (
+          <View style={styles.successContainer}>
+            <Text accessibilityLiveRegion="polite" style={styles.successText}>
+              Produto e estoque inicial cadastrados.
+            </Text>
+            <Text style={styles.successText}>ID do produto: {successMessage.productId}</Text>
+            <Text style={styles.successText}>
+              Quantidade inicial: {successMessage.quantity}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('ProductDetails', {
+                productId: successMessage.productId,
+              })}
+              style={styles.viewProductButton}
+            >
+              <Text style={styles.viewProductText}>Visualizar produto</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.forest} />
+            </Pressable>
+          </View>
+        ) : null}
         {workflowStatus ? (
           <View
-            style={[
-              workflowStatus.status === 'complete'
-                ? styles.successContainer
-                : styles.partialContainer,
-            ]}
+            style={styles.partialContainer}
           >
-            <Text
-              style={
-                workflowStatus.status === 'complete'
-                  ? styles.successText
-                  : styles.partialText
-              }
-            >
-              {workflowStatus.status === 'complete'
-                ? 'Produto e estoque inicial cadastrados.'
-                : workflowStatus.stage === 'creation'
-                  ? 'Etapa pendente: criação do produto (resultado não confirmado).'
-                  : `Etapa pendente: ${getStageLabel(workflowStatus.stage)}${
-                    workflowStatus.outcome === 'unknown'
-                      ? ' (resultado não confirmado).'
-                      : ' (não concluída).'
-                  }`}
+            <Text style={styles.partialText}>
+              {workflowStatus.stage === 'creation'
+                ? 'Etapa pendente: criação do produto (resultado não confirmado).'
+                : `Etapa pendente: ${getStageLabel(workflowStatus.stage)}${
+                  workflowStatus.outcome === 'unknown'
+                    ? ' (resultado não confirmado).'
+                    : ' (não concluída).'
+                }`}
             </Text>
             {workflowStatus.productId ? (
-              <Text
-                style={
-                  workflowStatus.status === 'complete'
-                    ? styles.successText
-                    : styles.partialText
-                }
-              >
+              <Text style={styles.partialText}>
                 ID do produto: {workflowStatus.productId}
               </Text>
             ) : null}
-            <Text
-              style={
-                workflowStatus.status === 'complete'
-                  ? styles.successText
-                  : styles.partialText
-              }
-            >
+            <Text style={styles.partialText}>
               Quantidade inicial: {workflowStatus.quantity}
             </Text>
             {workflowStatus.stage === 'entry' ? (
@@ -585,11 +622,7 @@ export function AddSellerProductScreen({ navigation }) {
             <ActivityIndicator color={colors.white} />
           ) : (
             <Text style={styles.submitText}>
-              {workflowStatus?.status === 'complete'
-                ? 'Cadastro concluído'
-                : workflowStatus
-                  ? 'Cadastro bloqueado'
-                  : 'Salvar produto'}
+              {workflowStatus ? 'Cadastro bloqueado' : 'Salvar produto'}
             </Text>
           )}
         </Pressable>
