@@ -14,13 +14,16 @@ import { colors } from '../theme/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthErrorMessage } from '../services/authService';
 
-export function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
+export function LoginScreen({ navigation, route }) {
+  const [email, setEmail] = useState(route?.params?.registeredEmail ?? '');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const submitLock = useRef(false);
   const { signIn } = useAuth();
+  const registrationMessage = route?.params?.registrationSucceeded
+    ? 'Conta criada com sucesso. Faça login para continuar.'
+    : '';
 
   async function handleSubmit() {
     if (submitLock.current) {
@@ -63,6 +66,12 @@ export function LoginScreen({ navigation }) {
         />
         <Text style={styles.title}>Que bom te ver.</Text>
         <Text style={styles.subtitle}>Entre para acompanhar teus pedidos e continuar teu mate.</Text>
+
+        {registrationMessage ? (
+          <Text accessibilityLiveRegion="polite" style={styles.success}>
+            {registrationMessage}
+          </Text>
+        ) : null}
 
         <Text style={styles.label}>E-mail</Text>
         <TextInput
@@ -145,6 +154,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: -7,
     marginBottom: 12,
+  },
+  success: {
+    color: colors.forest,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 14,
   },
   input: {
     height: 50,

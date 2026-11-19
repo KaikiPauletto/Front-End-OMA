@@ -39,17 +39,18 @@ export function RegisterScreen({ navigation }) {
         email: email.trim(),
         password,
       });
-      Alert.alert(
-        'Conta criada',
-        'Sua conta foi criada com sucesso. Faça login para continuar.',
-        [{ text: 'Ir para o login', onPress: () => navigation.navigate('Login') }],
-      );
     } catch (error) {
       Alert.alert('Não foi possível criar a conta', getAuthErrorMessage(error, 'register'));
+      return;
     } finally {
       submitLock.current = false;
       setIsSubmitting(false);
     }
+
+    navigation.replace('Login', {
+      registeredEmail: email.trim(),
+      registrationSucceeded: true,
+    });
   }
 
   return (
