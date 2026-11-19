@@ -29,6 +29,12 @@ import {
   getProductStock,
 } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
+import { ApiError } from '../services/apiClient';
+import {
+  getProductInventory,
+  InvalidInventoryResponseError,
+} from '../services/inventoryService';
+import { normalizeNonNegativeInt64 } from '../services/int64';
 import {
   getAdminProductById,
   getProductById,
@@ -37,6 +43,47 @@ import {
 } from '../services/productService';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
+
+function formatInventoryQuantity(value) {
+  const normalized = normalizeNonNegativeInt64(value);
+  return normalized?.replace(/\B(?=(\d{3})+(?!\d))/g, '.') ?? '—';
+}
+
+function formatInventoryTimestamp(value) {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime())
+    ? ''
+    : timestamp.toLocaleString('pt-BR');
+}
+
+function getInventoryErrorMessage(error) {
+  if (error instanceof ApiError) {
+    if (error.status === 404) {
+      return 'Estoque ainda não registrado para este produto.';
+    }
+    if (error.status === 401) {
+      return 'Sua sessão de administrador expirou. Entre novamente para consultar o estoque.';
+    }
+    if (error.status === 403) {
+      return 'Sua conta não tem autorização para consultar este estoque.';
+    }
+    return `Não foi possível carregar o estoque (HTTP ${error.status}).`;
+  }
+
+  if (error instanceof InvalidInventoryResponseError) {
+    return 'A API retornou dados de estoque inválidos ou incompatíveis.';
+  }
+
+  if (
+    error instanceof Error &&
+    (error.message.startsWith('API não configurada.') ||
+      error.message.startsWith('Sua sessão não está válida.'))
+  ) {
+    return error.message;
+  }
+
+  return 'Falha de comunicação ao carregar o estoque. Verifique a conexão e tente novamente.';
+}
 
 export function ProductDetailsScreen({ navigation, route }) {
   const { user, token } = useAuth();
@@ -56,6 +103,8 @@ export function ProductDetailsScreen({ navigation, route }) {
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [inventoryState, setInventoryState] = useState(null);
+  const [inventoryReloadKey, setInventoryReloadKey] = useState(0);
   const remoteProduct = apiProduct?.id === String(productId) &&
     apiProductAdminOrigin === isAdminOrigin
     ? apiProduct
@@ -63,6 +112,11 @@ export function ProductDetailsScreen({ navigation, route }) {
   const product = catalogProduct ?? sellerProduct ?? remoteProduct;
   const isRemoteProduct = isAdminOrigin || (!catalogProduct && !sellerProduct);
   const isSellerProduct = !catalogProduct && Boolean(sellerProduct);
+  const isAdminProductLoaded = Boolean(remoteProduct);
+  const adminProductType = remoteProduct?.productType;
+  const currentInventoryState = inventoryState?.productId === String(productId)
+    ? inventoryState
+    : null;
   const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
   const [quantity, setQuantity] = useState(1);
   const [cartConfirmationVisible, setCartConfirmationVisible] = useState(
@@ -115,6 +169,61 @@ export function ProductDetailsScreen({ navigation, route }) {
       active = false;
     };
   }, [productId, catalogProduct?.id, sellerProduct?.id, isAdminOrigin, token, reloadKey]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isAdminOrigin || !isAdminProductLoaded) {
+      setInventoryState(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    const requestedProductId = String(productId);
+    if (typeof token !== 'string' || !token.trim()) {
+      setInventoryState({
+        productId: requestedProductId,
+        status: 'error',
+        message: 'Sua sessão não está válida. Entre novamente como administrador.',
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    setInventoryState({ productId: requestedProductId, status: 'loading' });
+    getProductInventory(productId, adminProductType, token)
+      .then((inventory) => {
+        if (active) {
+          setInventoryState({
+            productId: requestedProductId,
+            status: 'success',
+            inventory,
+          });
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setInventoryState({
+            productId: requestedProductId,
+            status: 'error',
+            message: getInventoryErrorMessage(error),
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    isAdminOrigin,
+    isAdminProductLoaded,
+    productId,
+    adminProductType,
+    token,
+    inventoryReloadKey,
+  ]);
 
   const variant = product?.variants?.find((item) => item.id === variantId)
     ?? product?.variants?.[0]
@@ -407,6 +516,84 @@ export function ProductDetailsScreen({ navigation, route }) {
               : 'Produto por quantidade. Disponibilidade sujeita à confirmação.'}
           </Text>
 
+          {isAdminOrigin ? (
+            <View style={styles.inventorySection}>
+              <View style={styles.inventoryCard}>
+                <Text style={[styles.optionTitle, styles.inventoryTitle]}>Estoque</Text>
+                {!currentInventoryState || currentInventoryState.status === 'loading' ? (
+                  <View style={styles.inventoryState}>
+                    <ActivityIndicator color={colors.forest} />
+                    <Text style={styles.inventoryStateText}>Carregando estoque...</Text>
+                  </View>
+                ) : currentInventoryState.status === 'error' ? (
+                  <View style={styles.inventoryState}>
+                    <Text style={styles.inventoryErrorText}>
+                      {currentInventoryState.message}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setInventoryReloadKey((key) => key + 1)}
+                      style={styles.inventoryRetry}
+                    >
+                      <Text style={styles.inventoryRetryText}>Tentar novamente</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <>
+                    {[
+                      ['Quantidade física', currentInventoryState.inventory.quantityOnHand],
+                      ['Quantidade reservada', currentInventoryState.inventory.quantityReserved],
+                      ['Quantidade disponível', currentInventoryState.inventory.availableQuantity],
+                      ['Limite de estoque baixo', currentInventoryState.inventory.lowStockThreshold],
+                    ].map(([label, value]) => (
+                      <View key={label} style={styles.inventoryRow}>
+                        <Text style={styles.inventoryLabel}>{label}</Text>
+                        <Text style={styles.inventoryValue}>
+                          {formatInventoryQuantity(value)}
+                        </Text>
+                      </View>
+                    ))}
+                    <View
+                      style={[
+                        styles.inventoryLowStock,
+                        currentInventoryState.inventory.lowStock
+                          ? styles.inventoryLowStockActive
+                          : styles.inventoryLowStockNormal,
+                      ]}
+                    >
+                      <Ionicons
+                        name={currentInventoryState.inventory.lowStock
+                          ? 'warning-outline'
+                          : 'checkmark-circle-outline'}
+                        size={16}
+                        color={currentInventoryState.inventory.lowStock
+                          ? colors.danger
+                          : colors.forest}
+                      />
+                      <Text
+                        style={[
+                          styles.inventoryLowStockText,
+                          currentInventoryState.inventory.lowStock
+                            ? styles.inventoryLowStockTextActive
+                            : styles.inventoryLowStockTextNormal,
+                        ]}
+                      >
+                        {currentInventoryState.inventory.lowStock
+                          ? 'Estoque baixo'
+                          : 'Sem alerta de estoque baixo'}
+                      </Text>
+                    </View>
+                    {formatInventoryTimestamp(currentInventoryState.inventory.updatedAt) ? (
+                      <Text style={styles.inventoryUpdatedAt}>
+                        Atualizado em {formatInventoryTimestamp(currentInventoryState.inventory.updatedAt)}
+                      </Text>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            </View>
+          ) : null}
+
           {!isRemoteProduct && !isAdministrator && product.type !== 'UNITÁRIO' && stock > 0 ? (
             <View style={styles.quantityRow}>
               <Text style={styles.optionTitle}>Quantidade</Text>
@@ -560,6 +747,46 @@ const styles = StyleSheet.create({
   availability: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 22 },
   availabilityText: { color: colors.forestLight, fontSize: 12, fontWeight: '700' },
   typeDescription: { color: colors.muted, fontSize: 11, marginTop: 6 },
+  inventorySection: { marginTop: 24 },
+  inventoryCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 14,
+  },
+  inventoryTitle: { marginBottom: 8 },
+  inventoryState: { alignItems: 'center', paddingVertical: 8 },
+  inventoryStateText: { color: colors.muted, fontSize: 12, marginTop: 9 },
+  inventoryErrorText: { color: colors.danger, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  inventoryRetry: { paddingVertical: 10, paddingHorizontal: 12 },
+  inventoryRetryText: { color: colors.forest, fontSize: 12, fontWeight: '800' },
+  inventoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  inventoryLabel: { color: colors.mutedStrong, fontSize: 12, flex: 1, marginRight: 12 },
+  inventoryValue: { color: colors.ink, fontSize: 13, fontWeight: '700' },
+  inventoryLowStock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 12,
+  },
+  inventoryLowStockActive: { backgroundColor: colors.clayLight },
+  inventoryLowStockNormal: { backgroundColor: colors.sage },
+  inventoryLowStockText: { fontSize: 11, fontWeight: '700' },
+  inventoryLowStockTextActive: { color: colors.danger },
+  inventoryLowStockTextNormal: { color: colors.forest },
+  inventoryUpdatedAt: { color: colors.muted, fontSize: 10, marginTop: 12 },
   quantityRow: { marginTop: 21, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   recommendationSection: { marginTop: 24, marginBottom: 8 },
   recommendationList: { paddingHorizontal: 18, gap: 12, paddingBottom: 8 },

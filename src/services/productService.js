@@ -1,6 +1,6 @@
-import { apiRequest } from './apiClient';
-import { normalizePositiveInt64 } from './int64';
-import { parseJsonPreservingInt64 } from './losslessJson';
+import { apiRequest } from './apiClient.js';
+import { normalizePositiveInt64 } from './int64.js';
+import { parseJsonPreservingInt64 } from './losslessJson.js';
 
 export const productSortOptions = [
   { id: 'name-asc', label: 'Nome: A - Z', sort: 'name,asc' },
@@ -78,6 +78,9 @@ export async function getAdminProductById(productId, token) {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+    {
+      parseJson: parseJsonPreservingInt64,
     },
   );
   return mapProduct(response);
@@ -287,6 +290,9 @@ export async function listAdminProducts({
       headers: {
         Authorization: `Bearer ${token}`,
       },
+    },
+    {
+      parseJson: parseJsonPreservingInt64,
     },
   );
 

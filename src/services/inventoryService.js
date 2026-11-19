@@ -1,6 +1,6 @@
-import { apiRequest } from './apiClient';
-import { isNonNegativeInt64, normalizePositiveInt64, MAX_INT64 } from './int64';
-import { parseJsonPreservingInt64 } from './losslessJson';
+import { apiRequest } from './apiClient.js';
+import { isNonNegativeInt64, normalizePositiveInt64, MAX_INT64 } from './int64.js';
+import { parseJsonPreservingInt64 } from './losslessJson.js';
 
 const INITIAL_ENTRY_REASON = 'Estoque inicial';
 const productTypes = ['SINGLE_UNIT', 'MULTI_UNIT'];
@@ -107,6 +107,26 @@ export function validateInitialQuantity(value, productType) {
   }
 
   return { quantity, error: '' };
+}
+
+export async function getProductInventory(productId, productType, token) {
+  validateCredentials(token, productType);
+  const normalizedProductId = normalizeProductId(productId);
+  const response = await apiRequest(
+    `/ws/inventory/${encodeURIComponent(normalizedProductId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    {
+      includeStatus: true,
+      parseJson: parseJsonPreservingInt64,
+    },
+  );
+
+  return validateSuccessfulResponse(response, normalizedProductId, productType);
 }
 
 export async function registerProductInventory(productId, productType, token) {
