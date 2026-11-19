@@ -19,6 +19,12 @@ import {
   listCategories,
   listSubcategories,
 } from '../services/productService';
+import {
+  registerInitialInventoryEntry,
+  registerProductInventory,
+  validateInitialQuantity,
+} from '../services/inventoryService';
+import { isDefinitivePostStatus } from '../services/postOutcome';
 import { colors } from '../theme/colors';
 
 const priceInputFormatter = new Intl.NumberFormat('pt-BR', {
@@ -65,19 +71,44 @@ function parsePrice(value) {
   return Number(amount);
 }
 
-function getErrorMessage(error) {
+function getErrorMessage(error, operation = 'o cadastro') {
   if (error instanceof ApiError) {
     if (error.status === 401) {
-      return 'Sua sessão expirou. Entre novamente como administrador.';
+      return 'Sua sessão expirou. Entre novamente como administrador antes de continuar.';
     }
     if (error.status === 403) {
-      return 'Sua conta não tem permissão para cadastrar produtos.';
+      return 'Sua conta não tem permissão para concluir esta operação.';
     }
-    return error.message;
+    if (error.status === 400) {
+      return `A API rejeitou os dados enviados para ${operation}. Revise as informações.`;
+    }
+    if (error.status === 404) {
+      return `Não foram encontrados os dados necessários para ${operation}.`;
+    }
+    if (error.status === 409) {
+      return `A API recusou ${operation} por conflito. Verifique o estado atual antes de tentar novamente.`;
+    }
+    if (error.status === 502 || error.status === 503) {
+      return `A API não confirmou ${operation}. Verifique manualmente antes de tentar novamente.`;
+    }
+    return `Não foi possível concluir ${operation} (HTTP ${error.status}).`;
   }
-  return error instanceof Error
-    ? error.message
-    : 'Não foi possível concluir o cadastro. Tente novamente.';
+  return `Não foi possível confirmar ${operation} devido a uma falha de comunicação.`;
+}
+
+function isDefinitiveRequestRejection(error, operation) {
+  return error instanceof ApiError &&
+    isDefinitivePostStatus(error.status, operation);
+}
+
+function getStageLabel(stage) {
+  if (stage === 'creation') {
+    return 'criação do produto';
+  }
+  if (stage === 'registration') {
+    return 'registro do estoque';
+  }
+  return 'entrada da quantidade inicial';
 }
 
 export function AddSellerProductScreen({ navigation }) {
@@ -90,15 +121,17 @@ export function AddSellerProductScreen({ navigation }) {
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [productType, setProductType] = useState('');
+  const [initialQuantity, setInitialQuantity] = useState('');
   const [subcategoryPickerVisible, setSubcategoryPickerVisible] = useState(false);
   const [categoryGroups, setCategoryGroups] = useState([]);
   const [isLoadingSubcategories, setIsLoadingSubcategories] = useState(true);
   const [subcategoryLoadError, setSubcategoryLoadError] = useState('');
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [submitError, setSubmitError] = useState('');
-  const [successProductId, setSuccessProductId] = useState(null);
+  const [workflowStatus, setWorkflowStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLock = useRef(false);
+  const isFormLocked = isSubmitting || Boolean(workflowStatus);
 
   useEffect(() => {
     let isActive = true;
@@ -127,7 +160,9 @@ export function AddSellerProductScreen({ navigation }) {
         }
       } catch (error) {
         if (isActive) {
-          setSubcategoryLoadError(getErrorMessage(error));
+          setSubcategoryLoadError(
+            getErrorMessage(error, 'o carregamento de categorias e subcategorias'),
+          );
         }
       } finally {
         if (isActive) {
@@ -146,7 +181,6 @@ export function AddSellerProductScreen({ navigation }) {
     return (value) => {
       setter(value);
       setSubmitError('');
-      setSuccessProductId(null);
     };
   }
 
@@ -157,6 +191,7 @@ export function AddSellerProductScreen({ navigation }) {
 
     const parsedPrice = parsePrice(price);
     const subcategoryId = Number(selectedSubcategory?.id);
+    const quantityValidation = validateInitialQuantity(initialQuantity, productType);
     if (
       !name.trim() ||
       !brand.trim() ||
@@ -173,11 +208,20 @@ export function AddSellerProductScreen({ navigation }) {
       );
       return;
     }
+    if (quantityValidation.error) {
+      setSubmitError(quantityValidation.error);
+      return;
+    }
+    if (typeof token !== 'string' || !token.trim()) {
+      setSubmitError('Sua sessão não está válida. Entre novamente como administrador.');
+      return;
+    }
 
     submitLock.current = true;
     setIsSubmitting(true);
     setSubmitError('');
 
+    let keepSubmitLocked = false;
     try {
       const createdProduct = await createProduct({
         name: name.trim(),
@@ -190,11 +234,96 @@ export function AddSellerProductScreen({ navigation }) {
         subcategoryId,
         productType,
       }, token);
-      setSuccessProductId(String(createdProduct.id));
+      const productId = String(createdProduct.id);
+      const quantity = quantityValidation.quantity;
+      keepSubmitLocked = true;
+      setWorkflowStatus({
+        status: 'pending',
+        stage: 'registration',
+        productId,
+        productType,
+        quantity,
+      });
+
+      try {
+        await registerProductInventory(productId, productType, token);
+      } catch (error) {
+        const outcome = isDefinitiveRequestRejection(error, 'inventoryRegistration')
+          ? 'failed'
+          : 'unknown';
+        setWorkflowStatus({
+          status: 'partial',
+          stage: 'registration',
+          outcome,
+          productId,
+          productType,
+          quantity,
+        });
+        setSubmitError(getErrorMessage(error, 'o registro do estoque'));
+        return;
+      }
+
+      if (quantity !== '0') {
+        setWorkflowStatus({
+          status: 'pending',
+          stage: 'entry',
+          productId,
+          productType,
+          quantity,
+        });
+
+        try {
+          await registerInitialInventoryEntry(
+            productId,
+            productType,
+            quantity,
+            token,
+          );
+        } catch (error) {
+          const outcome = isDefinitiveRequestRejection(error, 'inventoryEntry')
+            ? 'failed'
+            : 'unknown';
+          setWorkflowStatus({
+            status: 'partial',
+            stage: 'entry',
+            outcome,
+            productId,
+            productType,
+            quantity,
+          });
+          setSubmitError(getErrorMessage(error, 'a entrada da quantidade inicial'));
+          return;
+        }
+      }
+
+      setWorkflowStatus({
+        status: 'complete',
+        stage: 'complete',
+        productId,
+        productType,
+        quantity,
+      });
     } catch (error) {
-      setSubmitError(getErrorMessage(error));
+      if (isDefinitiveRequestRejection(error, 'productCreation')) {
+        setSubmitError(getErrorMessage(error));
+      } else {
+        keepSubmitLocked = true;
+        setWorkflowStatus({
+          status: 'partial',
+          stage: 'creation',
+          outcome: 'unknown',
+          productId: null,
+          productType,
+          quantity: quantityValidation.quantity,
+        });
+        setSubmitError(
+          'A resposta da criação não foi confirmada. O produto pode ter sido criado; não reenvie o cadastro antes de verificar manualmente.',
+        );
+      }
     } finally {
-      submitLock.current = false;
+      if (!keepSubmitLocked) {
+        submitLock.current = false;
+      }
       setIsSubmitting(false);
     }
   }
@@ -222,6 +351,7 @@ export function AddSellerProductScreen({ navigation }) {
       >
         <Text style={styles.label}>Nome</Text>
         <TextInput
+          editable={!isFormLocked}
           onChangeText={handleFieldChange(setName)}
           placeholder="Nome do produto"
           placeholderTextColor={colors.muted}
@@ -231,6 +361,7 @@ export function AddSellerProductScreen({ navigation }) {
 
         <Text style={styles.label}>Marca</Text>
         <TextInput
+          editable={!isFormLocked}
           onChangeText={handleFieldChange(setBrand)}
           placeholder="Marca do produto"
           placeholderTextColor={colors.muted}
@@ -240,6 +371,7 @@ export function AddSellerProductScreen({ navigation }) {
 
         <Text style={styles.label}>Modelo</Text>
         <TextInput
+          editable={!isFormLocked}
           onChangeText={handleFieldChange(setModel)}
           placeholder="Modelo do produto"
           placeholderTextColor={colors.muted}
@@ -251,6 +383,7 @@ export function AddSellerProductScreen({ navigation }) {
         <View style={styles.priceInputContainer}>
           <Text style={styles.currencyPrefix}>R$</Text>
           <TextInput
+            editable={!isFormLocked}
             keyboardType="number-pad"
             onChangeText={(value) => handleFieldChange(setPrice)(formatPriceInput(value))}
             placeholder="0,00"
@@ -263,7 +396,11 @@ export function AddSellerProductScreen({ navigation }) {
         <Text style={styles.label}>Subcategoria</Text>
         <Pressable
           accessibilityRole="button"
-          disabled={isLoadingSubcategories || categoryGroups.length === 0}
+          disabled={
+            isFormLocked ||
+            isLoadingSubcategories ||
+            categoryGroups.length === 0
+          }
           onPress={() => setSubcategoryPickerVisible(true)}
           style={styles.categoryButton}
         >
@@ -283,6 +420,7 @@ export function AddSellerProductScreen({ navigation }) {
             <Text style={styles.errorText}>{subcategoryLoadError}</Text>
             <Pressable
               accessibilityRole="button"
+              disabled={isFormLocked}
               onPress={() => setCatalogReloadKey((key) => key + 1)}
               style={styles.retryButton}
             >
@@ -299,6 +437,7 @@ export function AddSellerProductScreen({ navigation }) {
               <Pressable
                 accessibilityRole="radio"
                 accessibilityState={{ checked: isSelected }}
+                disabled={isFormLocked}
                 key={type.value}
                 onPress={() => handleFieldChange(setProductType)(type.value)}
                 style={[
@@ -320,10 +459,27 @@ export function AddSellerProductScreen({ navigation }) {
           })}
         </View>
 
+        <Text style={styles.label}>Estoque inicial</Text>
+        <TextInput
+          editable={!isFormLocked}
+          keyboardType="number-pad"
+          onChangeText={handleFieldChange(setInitialQuantity)}
+          placeholder="Quantidade inteira"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={initialQuantity}
+        />
+        <Text style={styles.quantityHint}>
+          {productType === 'SINGLE_UNIT'
+            ? 'Produto unitário: informe 0 ou 1.'
+            : 'Informe uma quantidade inteira de 0 até o limite suportado pela API.'}
+        </Text>
+
         <Text style={styles.label}>URL da imagem (opcional)</Text>
         <TextInput
           autoCapitalize="none"
           autoCorrect={false}
+          editable={!isFormLocked}
           keyboardType="url"
           onChangeText={handleFieldChange(setImageUrl)}
           placeholder="https://..."
@@ -334,6 +490,7 @@ export function AddSellerProductScreen({ navigation }) {
 
         <Text style={styles.label}>Informações do produto</Text>
         <TextInput
+          editable={!isFormLocked}
           multiline
           onChangeText={handleFieldChange(setDescription)}
           placeholder="Descreva os detalhes do produto"
@@ -344,19 +501,71 @@ export function AddSellerProductScreen({ navigation }) {
         />
 
         {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
-        {successProductId ? (
-          <View style={styles.successContainer}>
-            <Text style={styles.successText}>
-              Produto criado no catálogo. O estoque inicial não foi integrado nesta etapa.
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => navigation.navigate('ProductDetails', { productId: successProductId })}
-              style={styles.viewProductButton}
+        {workflowStatus ? (
+          <View
+            style={[
+              workflowStatus.status === 'complete'
+                ? styles.successContainer
+                : styles.partialContainer,
+            ]}
+          >
+            <Text
+              style={
+                workflowStatus.status === 'complete'
+                  ? styles.successText
+                  : styles.partialText
+              }
             >
-              <Text style={styles.viewProductText}>Visualizar produto</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.forest} />
-            </Pressable>
+              {workflowStatus.status === 'complete'
+                ? 'Produto e estoque inicial cadastrados.'
+                : workflowStatus.stage === 'creation'
+                  ? 'Etapa pendente: criação do produto (resultado não confirmado).'
+                  : `Etapa pendente: ${getStageLabel(workflowStatus.stage)}${
+                    workflowStatus.outcome === 'unknown'
+                      ? ' (resultado não confirmado).'
+                      : ' (não concluída).'
+                  }`}
+            </Text>
+            {workflowStatus.productId ? (
+              <Text
+                style={
+                  workflowStatus.status === 'complete'
+                    ? styles.successText
+                    : styles.partialText
+                }
+              >
+                ID do produto: {workflowStatus.productId}
+              </Text>
+            ) : null}
+            <Text
+              style={
+                workflowStatus.status === 'complete'
+                  ? styles.successText
+                  : styles.partialText
+              }
+            >
+              Quantidade inicial: {workflowStatus.quantity}
+            </Text>
+            {workflowStatus.stage === 'entry' ? (
+              <Text style={styles.partialText}>Motivo da entrada: Estoque inicial</Text>
+            ) : null}
+            {workflowStatus.status !== 'complete' ? (
+              <Text style={styles.partialText}>
+                Não repita o cadastro nem a movimentação. Faça a conferência manual antes de qualquer nova operação.
+              </Text>
+            ) : null}
+            {workflowStatus.productId ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => navigation.navigate('ProductDetails', {
+                  productId: workflowStatus.productId,
+                })}
+                style={styles.viewProductButton}
+              >
+                <Text style={styles.viewProductText}>Visualizar produto</Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.forest} />
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
       </ScrollView>
@@ -364,19 +573,23 @@ export function AddSellerProductScreen({ navigation }) {
       <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ disabled: isSubmitting || Boolean(successProductId) }}
-          disabled={isSubmitting || Boolean(successProductId)}
+          accessibilityState={{ disabled: isFormLocked }}
+          disabled={isFormLocked}
           onPress={handleSubmit}
           style={[
             styles.submit,
-            (isSubmitting || successProductId) && styles.submitDisabled,
+            isFormLocked && styles.submitDisabled,
           ]}
         >
           {isSubmitting ? (
             <ActivityIndicator color={colors.white} />
           ) : (
             <Text style={styles.submitText}>
-              {successProductId ? 'Produto criado' : 'Salvar produto'}
+              {workflowStatus?.status === 'complete'
+                ? 'Cadastro concluído'
+                : workflowStatus
+                  ? 'Cadastro bloqueado'
+                  : 'Salvar produto'}
             </Text>
           )}
         </Pressable>
@@ -407,6 +620,7 @@ export function AddSellerProductScreen({ navigation }) {
                   {category.subcategories.map((subcategory) => (
                     <Pressable
                       accessibilityRole="button"
+                      disabled={isFormLocked}
                       key={subcategory.id}
                       onPress={() => {
                         handleFieldChange(setSelectedSubcategory)(subcategory);
@@ -505,6 +719,7 @@ const styles = StyleSheet.create({
   productTypeLabel: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   productTypeSelectedLabel: { color: colors.forest, fontSize: 13, fontWeight: '800' },
   productTypeDescription: { color: colors.muted, fontSize: 11, marginTop: 4 },
+  quantityHint: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: -10, marginBottom: 15 },
   descriptionInput: { minHeight: 118, paddingTop: 13 },
   loadErrorContainer: { marginTop: -8, marginBottom: 12 },
   errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
@@ -517,6 +732,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   successText: { color: colors.forest, fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  partialContainer: {
+    borderRadius: 14,
+    backgroundColor: colors.clayLight,
+    padding: 13,
+    marginBottom: 8,
+  },
+  partialText: { color: colors.danger, fontSize: 12, lineHeight: 18, fontWeight: '600', marginBottom: 4 },
   viewProductButton: {
     flexDirection: 'row',
     alignItems: 'center',

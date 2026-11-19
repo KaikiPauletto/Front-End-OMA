@@ -21,14 +21,14 @@ export class ApiError extends Error {
   }
 }
 
-function decodeBody(rawBody, contentType) {
+function decodeBody(rawBody, contentType, parseJson) {
   if (rawBody.length === 0) {
     return null;
   }
 
   if (contentType.includes('application/json')) {
     try {
-      return JSON.parse(rawBody);
+      return parseJson(rawBody);
     } catch {
       return rawBody;
     }
@@ -37,7 +37,11 @@ function decodeBody(rawBody, contentType) {
   return rawBody;
 }
 
-export async function apiRequest(path, options = {}, { includeStatus = false } = {}) {
+export async function apiRequest(
+  path,
+  options = {},
+  { includeStatus = false, parseJson = JSON.parse } = {},
+) {
   if (typeof path !== 'string' || !path.startsWith('/')) {
     throw new Error('O caminho da API deve ser relativo e começar com "/".');
   }
@@ -56,7 +60,7 @@ export async function apiRequest(path, options = {}, { includeStatus = false } =
 
   const rawBody = await response.text();
   const contentType = response.headers.get('content-type') ?? '';
-  const body = decodeBody(rawBody, contentType);
+  const body = decodeBody(rawBody, contentType, parseJson);
 
   if (!response.ok) {
     throw new ApiError(response, rawBody, body);

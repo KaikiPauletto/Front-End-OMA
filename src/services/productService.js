@@ -1,4 +1,6 @@
 import { apiRequest } from './apiClient';
+import { normalizePositiveInt64 } from './int64';
+import { parseJsonPreservingInt64 } from './losslessJson';
 
 export const productSortOptions = [
   { id: 'name-asc', label: 'Nome: A - Z', sort: 'name,asc' },
@@ -96,18 +98,25 @@ export async function createProduct(product, token) {
       },
       body: JSON.stringify(product),
     },
-    { includeStatus: true },
+    {
+      includeStatus: true,
+      parseJson: parseJsonPreservingInt64,
+    },
   );
 
   if (
     response.status !== 201 ||
-    !isRecord(response.data) ||
-    !hasIdentifier(response.data.id)
+    !isRecord(response.data)
   ) {
     throw new InvalidCatalogResponseError();
   }
 
-  return response.data;
+  const id = normalizePositiveInt64(response.data.id);
+  if (!id) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return { ...response.data, id };
 }
 
 export async function updateProduct(productId, product, token) {
