@@ -53,7 +53,8 @@ Ao iniciar sem sessão, o aplicativo abre a tela **Bem-vindo**, com opções de 
 - `src/theme/colors.js` reúne os tokens cromáticos alinhados ao Figma.
 - `src/theme/typography.js` centraliza famílias e tamanhos tipográficos. Os nomes Inter e EB Garamond do Figma estão representados temporariamente pelas famílias nativas sem/serif; os arquivos de fonte ainda não foram adicionados.
 - `src/components/AppButton.js` é o botão reutilizável para ações primárias e contornadas.
-- `src/components/AppHeader.js` implementa o cabeçalho compartilhado; a marca textual provisória mantém o tratamento `oma.` usado na primeira versão do protótipo.
+- `src/components/BrandLogo.js` centraliza as composições oficiais em SVG usadas nas telas Bem-vindo, Login, Cadastro e no cabeçalho da loja. O transformador Metro entrega o markup original ao `SvgXml`, preservando imagens Base64, máscaras e filtros.
+- `src/components/AppHeader.js` implementa o cabeçalho compartilhado e apresenta a composição horizontal oficial da loja quando não há seta de voltar; os cabeçalhos de navegação mantêm seus títulos e controles atuais.
 - `src/components/SectionTitle.js` padroniza títulos e ações de seção.
 - `src/components/ProductCard.js` segue a proporção visual do card do Figma; os detalhes de produtos públicos usam o carrinho persistente e a disponibilidade validada pelo backend.
 - `src/components/EditorialSection.js` encapsula a seção institucional “Nossas Raízes”.

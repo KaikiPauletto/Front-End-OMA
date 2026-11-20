@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BrandLogo } from '../components/BrandLogo';
 import { colors } from '../theme/colors';
 import { getAuthErrorMessage, registerUser } from '../services/authService';
 
@@ -62,12 +62,7 @@ export function RegisterScreen({ navigation }) {
         contentContainerStyle={styles.formContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Image
-          accessibilityLabel="Logo OMA"
-          resizeMode="contain"
-          source={require('../assets/oma-logo.png')}
-          style={styles.brandLogo}
-        />
+        <BrandLogo variant="auth" style={styles.brandLogo} />
         <Text style={styles.title}>Faça parte da roda.</Text>
         <Text style={styles.subtitle}>Crie sua conta para acompanhar teus pedidos e endereços.</Text>
 
@@ -141,8 +136,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandLogo: {
-    width: 174,
-    height: 174,
     alignSelf: 'center',
     marginBottom: 8,
   },

@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BrandLogo } from './BrandLogo';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
@@ -33,7 +34,7 @@ export function AppHeader({
             />
           </Pressable>
         ) : (
-          <Text style={styles.logo}>oma<Text style={styles.logoDot}>.</Text></Text>
+          <BrandLogo variant="catalog" />
         )}
 
         {title ? <Text numberOfLines={1} style={[styles.title, tone === 'forest' && styles.forestText]}>{title}</Text> : null}
@@ -71,15 +72,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  logo: {
-    color: colors.forest,
-    fontFamily: typography.family.display,
-    fontSize: 34,
-    fontWeight: '900',
-    lineHeight: 38,
-    letterSpacing: -2,
-  },
-  logoDot: { color: colors.clay },
   title: {
     flex: 1,
     textAlign: 'center',

@@ -1,5 +1,6 @@
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BrandLogo } from '../components/BrandLogo';
 import { colors } from '../theme/colors';
 
 export function WelcomeScreen({ navigation }) {
@@ -7,12 +8,7 @@ export function WelcomeScreen({ navigation }) {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.logoContainer}>
-          <Image
-            accessibilityLabel="Logo OMA"
-            resizeMode="contain"
-            source={require('../assets/oma-logo.png')}
-            style={styles.logoImage}
-          />
+          <BrandLogo variant="welcome" />
         </View>
 
         <View style={styles.heading}>
@@ -56,13 +52,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoContainer: {
-    width: 294,
-    height: 294,
+    width: 220,
+    height: 305.325,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 30,
   },
-  logoImage: { width: '100%', height: '100%' },
   heading: {
     alignItems: 'center',
     marginBottom: 58,
