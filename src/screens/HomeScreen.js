@@ -241,7 +241,7 @@ export function HomeScreen({ navigation }) {
           <Text style={styles.catalogCount}>
             {loading
               ? 'Carregando produtos...'
-              : `${totalElements} ${totalElements === 1 ? 'produto no catálogo' : 'produtos no catálogo'}`}
+              : `${totalElements} ${totalElements === 1 || totalElements === '1' ? 'produto no catálogo' : 'produtos no catálogo'}`}
           </Text>
           {categoryError ? <Text style={styles.emptyProducts}>{categoryError}</Text> : null}
           {productError ? (

@@ -31,9 +31,15 @@ const paymentOptions = [
   { id: 'boleto', label: 'Boleto', icon: 'barcode-outline' },
 ];
 
+function formatEstimate(value) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? formatCurrency(value)
+    : 'Não foi possível estimar';
+}
+
 export function CheckoutScreen({ navigation }) {
   const { user } = useAuth();
-  const { items, subtotal, clearCart } = useCart();
+  const { items, subtotal, estimateComplete } = useCart();
   const { addOrder } = useOrders();
   const [addressVisible, setAddressVisible] = useState(false);
   const [address, setAddress] = useState({
@@ -66,6 +72,16 @@ export function CheckoutScreen({ navigation }) {
       return;
     }
 
+    if (!estimateComplete || subtotal === null) {
+      setFormError('Não é possível registrar o pedido demonstrativo sem uma estimativa válida do backend.');
+      return;
+    }
+
+    if (items.some((item) => !item.productAvailable || !item.active || !item.available)) {
+      setFormError('Remova ou ajuste os produtos indisponíveis antes de continuar.');
+      return;
+    }
+
     const hasCompleteAddress = addressFields.every(({ key }) => address[key].trim());
     if (!addressVisible || !hasCompleteAddress) {
       setFormError('Preencha todos os campos do endereço para continuar.');
@@ -80,7 +96,6 @@ export function CheckoutScreen({ navigation }) {
     }
 
     setFormError('');
-    clearCart();
     setPurchaseComplete(true);
   }
 
@@ -94,6 +109,7 @@ export function CheckoutScreen({ navigation }) {
         <Text style={styles.successDescription}>
           Status: AGUARDANDO_PAGAMENTO.
           {'\n'}Registro pendente: nenhum pagamento foi processado e nenhum frete ou baixa de estoque foi confirmado.
+          {'\n'}A sacola persistida foi mantida porque este pedido é apenas demonstrativo.
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -155,19 +171,28 @@ export function CheckoutScreen({ navigation }) {
           <View key={item.key} style={styles.productRow}>
             <View style={[styles.productArtwork, { backgroundColor: item.product.backdrop || colors.surfaceMuted }]}>
               <ProductImage
-                accessibilityLabel={item.product.name}
+                accessibilityLabel={item.product.name || 'Produto'}
                 fallbackEmoji={item.product.emoji || '🧉'}
                 source={item.product.image}
                 style={styles.productImage}
               />
             </View>
             <View style={styles.productInfo}>
-              <Text numberOfLines={2} style={styles.productName}>{item.product.name}</Text>
+              <Text numberOfLines={2} style={styles.productName}>
+                {item.product.name || 'Produto removido do catálogo'}
+              </Text>
               {item.variant ? <Text style={styles.productVariant}>{item.variant.name}</Text> : null}
+              {item.product.brand || item.product.model ? (
+                <Text style={styles.productVariant}>
+                  {[item.product.brand, item.product.model].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
               <Text style={styles.productQuantity}>Quantidade: {item.quantity}</Text>
             </View>
             <Text style={styles.productTotal}>
-              {formatCurrency(item.unitPrice * item.quantity)}
+              {item.estimatedSubtotal === null
+                ? 'Indisponível'
+                : formatCurrency(item.estimatedSubtotal)}
             </Text>
           </View>
         ))}
@@ -175,7 +200,7 @@ export function CheckoutScreen({ navigation }) {
         <View style={styles.priceSummary}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal dos produtos</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(subtotal)}</Text>
+            <Text style={styles.summaryValue}>{formatEstimate(subtotal)}</Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Frete</Text>
@@ -184,7 +209,7 @@ export function CheckoutScreen({ navigation }) {
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.totalLabel}>Total dos produtos</Text>
-            <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
+            <Text style={styles.totalValue}>{formatEstimate(subtotal)}</Text>
           </View>
         </View>
 
@@ -312,7 +337,7 @@ export function CheckoutScreen({ navigation }) {
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View>
           <Text style={styles.footerLabel}>Total dos produtos</Text>
-          <Text style={styles.footerTotal}>{formatCurrency(subtotal)}</Text>
+          <Text style={styles.footerTotal}>{formatEstimate(subtotal)}</Text>
         </View>
         <Pressable
           accessibilityRole="button"

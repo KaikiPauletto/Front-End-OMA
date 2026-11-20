@@ -1,6 +1,6 @@
 # OMA — artigos gaúchos
 
-Aplicativo mobile em React Native com Expo, escrito em JavaScript. A autenticação, o cadastro, o logout e a consulta do catálogo usam o API Gateway; carrinho e checkout permanecem demonstrativos nesta etapa.
+Aplicativo mobile em React Native com Expo, escrito em JavaScript. Autenticação, catálogo e carrinho do cliente usam o API Gateway; o checkout e os pedidos continuam demonstrativos nesta etapa.
 
 ## Executar
 
@@ -17,12 +17,13 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 - `src/navigation`: navegação por abas e telas empilhadas com React Navigation.
 - `src/screens`: boas-vindas, login, cadastro, início, categorias, subcategorias, catálogo de produtos, detalhes, página institucional da OMA, sacola, checkout, pedidos e perfil.
 - `src/components`: componentes reutilizáveis de produto, quantidade e estados vazios.
-- `src/contexts/CartContext.js`: estado compartilhado da sacola.
+- `src/contexts/CartContext.js`: estado compartilhado da sacola persistida da sessão atual de CLIENTE.
 - `src/data/products.js`: dados demonstrativos mantidos para fluxos locais que ainda não consomem a API.
 - `src/data/categories.js`: taxonomia demonstrativa mantida para fluxos que ainda não consomem a API.
 - `src/components/CartAddedBar.js`: confirmação visual após adicionar um produto à sacola.
 - `src/components/ProductImage.js`: exibe fotos dos produtos com fallback quando a origem remota não responde.
 - `src/services/apiClient.js`: cliente HTTP para a URL-base do API Gateway.
+- `src/services/cartService.js`: consulta e mutações autenticadas do carrinho remoto, com validação lossless dos IDs e saldos inteiros.
 - `src/services/productService.js`: listagem pública paginada, busca, filtros, ordenação, detalhe por ID, consultas públicas de categorias/subcategorias e operações autenticadas de produtos, incluindo listagem e detalhe administrativos.
 - `src/services/authService.js`: integração dos fluxos de cadastro, login e logout com a API de autenticação.
 - `src/contexts/AuthContext.js`: usuário e token da sessão mantidos somente em memória.
@@ -33,7 +34,11 @@ Copie `.env.example` para `.env` e ajuste `EXPO_PUBLIC_API_URL` para a URL-base 
 
 Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. A listagem pública, busca, filtros por categoria/subcategoria e faixa de preço, ordenação e consulta de detalhes usam os endpoints públicos documentados em `API.md`. Administradores podem criar produtos em `POST /ws/products`, editar em `PUT /ws/products/{id}`, ativar/desativar em `PATCH /ws/products/{id}/status` e consultar a aba Vendas por `GET /ws/products`, filtrando por `ACTIVE`, `INACTIVE` ou `ALL` (padrão `ACTIVE`). Os detalhes abertos pela aba Vendas usam `GET /ws/products/{id}` e consultam o estoque real em `GET /ws/inventory/{productId}`; ambas as consultas administrativas usam o JWT de administrador. A lista da aba Vendas não exibe quantidades de estoque, que são apresentadas nos detalhes administrativos do produto. Categorias e subcategorias são carregadas pela API. Os cards administrativos oferecem atalho para edição. No cadastro administrativo, o frontend cria o produto, registra o estoque e, para quantidade inicial positiva, registra uma entrada; quantidade zero cria apenas o registro de estoque, com saldo físico zerado. As etapas não são atômicas: em falhas parciais, a tela mantém o ID e a etapa pendente e não repete automaticamente operações POST de resultado incerto; a conferência deve ser manual. A imagem é opcional e deve ser informada como URL ou referência; upload de arquivo não está integrado.
 
-Produtos `UNITÁRIO` permanecem limitados a uma unidade; produtos `QUANTITATIVO` respeitam o estoque e o limite máximo disponível no catálogo de demonstração. Essas verificações de interface não substituem a validação do backend.
+### Carrinho e checkout
+
+O carrinho de CLIENTE é carregado e atualizado pelos endpoints públicos `GET /ws/cart`, `POST /ws/cart/items`, `PATCH /ws/cart/items/{productId}` e `DELETE /ws/cart/items/{productId}`, usando o JWT do AuthContext. O POST substitui a quantidade desejada; ao adicionar novamente um produto `MULTI_UNIT`, o frontend calcula o total desejado antes de enviar o upsert. O carrinho não utiliza preços ou disponibilidade demonstrativos como fallback. IDs e saldos inteiros longos são preservados pelo parser lossless. Produtos locais/demonstrativos com variantes não são enviados ao carrinho persistente porque o contrato atual não contém `variantId`. O checkout continua criando apenas um pedido local demonstrativo: não chama `POST /ws/orders` e não limpa o carrinho remoto. A limpeza remota ficará para a futura integração de pedidos após confirmação do backend.
+
+Produtos `SINGLE_UNIT` permanecem limitados a uma unidade e produtos `MULTI_UNIT` respeitam a disponibilidade retornada pelo backend. Os modelos locais em `src/data/products.js` continuam demonstrativos e não são fonte de preço ou estoque para o carrinho persistente.
 
 
 ## Fluxo de acesso
@@ -48,7 +53,7 @@ Ao iniciar sem sessão, o aplicativo abre a tela **Bem-vindo**, com opções de 
 - `src/components/AppButton.js` é o botão reutilizável para ações primárias e contornadas.
 - `src/components/AppHeader.js` implementa o cabeçalho compartilhado; a marca textual provisória mantém o tratamento `oma.` usado na primeira versão do protótipo.
 - `src/components/SectionTitle.js` padroniza títulos e ações de seção.
-- `src/components/ProductCard.js` segue a proporção visual do card do Figma e continua respeitando o tipo e o estoque por meio do `CartContext`.
+- `src/components/ProductCard.js` segue a proporção visual do card do Figma; os detalhes de produtos públicos usam o carrinho persistente e a disponibilidade validada pelo backend.
 - `src/components/EditorialSection.js` encapsula a seção institucional “Nossas Raízes”.
 - O botão “Conheça a OMA” abre `src/screens/AboutOMAScreen.js`, com a história do projeto e seus quatro criadores.
 - A navegação inferior possui `Home`, `Carrinho` e `Conta`. A tela `Pedidos` está aninhada na área `Conta`.

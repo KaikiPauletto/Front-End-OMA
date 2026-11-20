@@ -291,7 +291,7 @@ export function ProductsScreen({ navigation, route }) {
         <Text style={styles.resultText}>
           {loading
             ? 'Carregando produtos...'
-            : `${totalElements} ${totalElements === 1 ? 'resultado' : 'resultados'}`}
+            : `${totalElements} ${totalElements === 1 || totalElements === '1' ? 'resultado' : 'resultados'}`}
         </Text>
         <Text style={styles.sortLabel}>{selectedSort.label}</Text>
       </View>

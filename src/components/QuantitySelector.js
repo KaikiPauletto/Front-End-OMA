@@ -2,25 +2,28 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 
-export function QuantitySelector({ value, maximum, onChange, compact = false }) {
+export function QuantitySelector({ value, maximum, onChange, compact = false, disabled = false }) {
+  const decreaseDisabled = disabled || value <= 1;
+  const increaseDisabled = disabled || value >= maximum;
+
   return (
     <View style={[styles.container, compact && styles.compact]}>
       <Pressable
         accessibilityLabel="Diminuir quantidade"
-        disabled={value <= 1}
+        disabled={decreaseDisabled}
         onPress={() => onChange(value - 1)}
         style={styles.button}
       >
-        <Ionicons color={value <= 1 ? colors.border : colors.forest} name="remove" size={17} />
+        <Ionicons color={decreaseDisabled ? colors.border : colors.forest} name="remove" size={17} />
       </Pressable>
       <Text style={styles.value}>{value}</Text>
       <Pressable
         accessibilityLabel="Aumentar quantidade"
-        disabled={value >= maximum}
+        disabled={increaseDisabled}
         onPress={() => onChange(value + 1)}
         style={styles.button}
       >
-        <Ionicons color={value >= maximum ? colors.border : colors.forest} name="add" size={17} />
+        <Ionicons color={increaseDisabled ? colors.border : colors.forest} name="add" size={17} />
       </Pressable>
     </View>
   );

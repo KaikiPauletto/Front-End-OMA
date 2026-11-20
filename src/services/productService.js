@@ -1,5 +1,5 @@
 import { apiRequest } from './apiClient.js';
-import { normalizePositiveInt64 } from './int64.js';
+import { isNonNegativeInt64, normalizePositiveInt64 } from './int64.js';
 import { parseJsonPreservingInt64 } from './losslessJson.js';
 
 export const productSortOptions = [
@@ -60,6 +60,8 @@ function mapProduct(product) {
 export async function getProductById(productId) {
   const response = await apiRequest(
     `/products/${encodeURIComponent(productId)}?targetCurrency=BRL`,
+    {},
+    { parseJson: parseJsonPreservingInt64 },
   );
   return mapProduct(response);
 }
@@ -233,14 +235,18 @@ export async function listProducts({
     page,
     size,
   });
-  const response = await apiRequest(`/products?${query}`);
+  const response = await apiRequest(
+    `/products?${query}`,
+    {},
+    { parseJson: parseJsonPreservingInt64 },
+  );
 
   if (
     !isRecord(response) ||
     !Array.isArray(response.content) ||
     !Number.isInteger(response.number) ||
     !Number.isInteger(response.totalPages) ||
-    !Number.isFinite(response.totalElements)
+    !isNonNegativeInt64(response.totalElements)
   ) {
     throw new InvalidCatalogResponseError();
   }
@@ -301,7 +307,7 @@ export async function listAdminProducts({
     !Array.isArray(response.content) ||
     !Number.isInteger(response.number) ||
     !Number.isInteger(response.totalPages) ||
-    !Number.isFinite(response.totalElements)
+    !isNonNegativeInt64(response.totalElements)
   ) {
     throw new InvalidCatalogResponseError();
   }

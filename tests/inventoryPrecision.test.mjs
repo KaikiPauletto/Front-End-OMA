@@ -173,7 +173,7 @@ test('admin product list and details preserve 64-bit product IDs', async () => {
   globalThis.fetch = async (url, options) => {
     assert.equal(options.headers.Authorization, 'Bearer admin-token');
     const body = url.includes('/ws/products?')
-      ? `{"content":[${productResponse}],"number":0,"totalPages":1,"totalElements":1}`
+      ? `{"content":[${productResponse}],"number":0,"totalPages":1,"totalElements":9223372036854775807}`
       : productResponse;
     return new Response(body, {
       status: 200,
@@ -186,6 +186,7 @@ test('admin product list and details preserve 64-bit product IDs', async () => {
     const product = await getAdminProductById(MAX_INT64, 'admin-token');
 
     assert.equal(result.products[0].id, MAX_INT64);
+    assert.equal(result.totalElements, MAX_INT64);
     assert.equal(product.id, MAX_INT64);
   } finally {
     globalThis.fetch = previousFetch;

@@ -295,7 +295,7 @@ export function SellerProductsScreen({ navigation }) {
       <Text style={styles.resultCount}>
         {loading
           ? 'Carregando produtos...'
-          : `${totalElements} ${totalElements === 1 ? 'produto' : 'produtos'}`}
+          : `${totalElements} ${totalElements === 1 || totalElements === '1' ? 'produto' : 'produtos'}`}
       </Text>
 
       <FlatList

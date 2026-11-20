@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { QuantitySelector } from '../components/QuantitySelector';
 import { CartAddedBar } from '../components/CartAddedBar';
 import { ProductImage } from '../components/ProductImage';
 import { ProductCard } from '../components/ProductCard';
@@ -24,9 +23,7 @@ import { useProductCatalog } from '../contexts/ProductCatalogContext';
 import { useSellerProducts } from '../contexts/SellerProductsContext';
 import {
   getAvailableProducts,
-  getMaximumPurchase,
   getProductPrice,
-  getProductStock,
 } from '../data/products';
 import { getCategoryLabel } from '../data/categories';
 import { ApiError } from '../services/apiClient';
@@ -88,6 +85,7 @@ function getInventoryErrorMessage(error) {
 export function ProductDetailsScreen({ navigation, route }) {
   const { user, token } = useAuth();
   const isAdministrator = user?.role === 'ADMINISTRADOR';
+  const isCustomer = user?.role === 'CLIENTE';
   const isAdminOrigin = isAdministrator && route.params?.source === 'admin';
   const { products: catalogProducts, updateProduct: updateCatalogProduct } = useProductCatalog();
   const { products: sellerProducts, updateProduct: updateSellerProduct } = useSellerProducts();
@@ -111,6 +109,7 @@ export function ProductDetailsScreen({ navigation, route }) {
     : null;
   const product = catalogProduct ?? sellerProduct ?? remoteProduct;
   const isRemoteProduct = isAdminOrigin || (!catalogProduct && !sellerProduct);
+  const isPublicApiProduct = Boolean(remoteProduct) && !isAdminOrigin && isCustomer;
   const isSellerProduct = !catalogProduct && Boolean(sellerProduct);
   const isAdminProductLoaded = Boolean(remoteProduct);
   const adminProductType = remoteProduct?.productType;
@@ -118,16 +117,24 @@ export function ProductDetailsScreen({ navigation, route }) {
     ? inventoryState
     : null;
   const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
-  const [quantity, setQuantity] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
   const [cartConfirmationVisible, setCartConfirmationVisible] = useState(
-    Boolean(route.params?.justAdded) && !isAdministrator,
+    Boolean(route.params?.justAdded) && isCustomer && !isAdminOrigin,
   );
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [deactivationModalVisible, setDeactivationModalVisible] = useState(false);
   const [productStatusError, setProductStatusError] = useState('');
   const [isUpdatingProductStatus, setIsUpdatingProductStatus] = useState(false);
   const productStatusLock = useRef(false);
-  const { addItem, itemCount } = useCart();
+  const {
+    addItem,
+    itemCount,
+    status: cartStatus,
+    error: cartError,
+    isMutating: isCartMutating,
+    reconciliationRequired,
+    refreshCart,
+  } = useCart();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -247,9 +254,8 @@ export function ProductDetailsScreen({ navigation, route }) {
 
   useEffect(() => {
     setVariantId(product?.variants?.[0]?.id ?? null);
-    setQuantity(1);
-    setCartConfirmationVisible(Boolean(route.params?.justAdded) && !isAdministrator);
-  }, [product?.id, route.params?.justAdded, isAdministrator]);
+    setCartConfirmationVisible(Boolean(route.params?.justAdded) && isCustomer && !isAdminOrigin);
+  }, [product?.id, route.params?.justAdded, isCustomer, isAdminOrigin]);
 
   useEffect(() => {
     if (isAdministrator && route.params?.editOnOpen) {
@@ -298,17 +304,34 @@ export function ProductDetailsScreen({ navigation, route }) {
     );
   }
 
-  const stock = getProductStock(product, variant);
   const unitPrice = getProductPrice(product, variant);
-  const maximum = getMaximumPurchase(product, variant);
+  const canAddToCart = isPublicApiProduct &&
+    product.active !== false &&
+    cartStatus === 'ready' &&
+    !isCartMutating &&
+    !reconciliationRequired &&
+    !addingToCart;
 
-  function handleAdd() {
-    const result = addItem(product, variant, quantity);
+  async function handleAdd() {
+    if (!isPublicApiProduct || addingToCart || isCartMutating) {
+      return;
+    }
 
-    if (result?.ok) {
-      setCartConfirmationVisible(true);
-    } else {
-      Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
+    setAddingToCart(true);
+    try {
+      const result = await addItem(product, null, 1);
+      if (result?.ok) {
+        setCartConfirmationVisible(true);
+      } else {
+        Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
+      }
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível adicionar',
+        error instanceof Error ? error.message : 'Tente novamente.',
+      );
+    } finally {
+      setAddingToCart(false);
     }
   }
 
@@ -405,12 +428,17 @@ export function ProductDetailsScreen({ navigation, route }) {
     return true;
   }
 
-  function handleAddRecommendation(recommendedProduct) {
-    const result = addItem(recommendedProduct);
-    if (result?.ok) {
-      setCartConfirmationVisible(true);
-    } else {
-      Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
+  async function handleAddRecommendation(recommendedProduct) {
+    try {
+      const result = await addItem(recommendedProduct);
+      if (!result?.ok) {
+        Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
+      }
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível adicionar',
+        error instanceof Error ? error.message : 'Tente novamente.',
+      );
     }
   }
 
@@ -456,6 +484,9 @@ export function ProductDetailsScreen({ navigation, route }) {
             </Text>
           ) : null}
           <Text style={styles.price}>{formatCurrency(unitPrice)}</Text>
+          {!isRemoteProduct ? (
+            <Text style={styles.demoPriceLabel}>Preço demonstrativo</Text>
+          ) : null}
           <Text style={styles.description}>{product.description}</Text>
 
           {product.variants?.length ? (
@@ -469,7 +500,6 @@ export function ProductDetailsScreen({ navigation, route }) {
                       key={item.id}
                       onPress={() => {
                         setVariantId(item.id);
-                        setQuantity(1);
                       }}
                       style={[styles.variant, selected && styles.variantSelected]}
                     >
@@ -496,17 +526,9 @@ export function ProductDetailsScreen({ navigation, route }) {
             </View>
           ) : (
             <View style={styles.availability}>
-              <Ionicons
-                name={product.active === false ? 'close-circle' : 'checkmark-circle'}
-                size={17}
-                color={product.active === false ? colors.danger : colors.forestLight}
-              />
-              <Text style={styles.availabilityText}>
-                {product.active === false
-                  ? 'Produto desativado'
-                  : stock > 0
-                  ? (isAdministrator ? 'Produto disponível' : 'Disponível para compra')
-                  : 'Indisponível no momento'}
+              <Ionicons name="information-circle-outline" size={17} color={colors.muted} />
+              <Text style={[styles.availabilityText, styles.demoAvailabilityText]}>
+                Produto demonstrativo fora do catálogo persistente.
               </Text>
             </View>
           )}
@@ -594,11 +616,10 @@ export function ProductDetailsScreen({ navigation, route }) {
             </View>
           ) : null}
 
-          {!isRemoteProduct && !isAdministrator && product.type !== 'UNITÁRIO' && stock > 0 ? (
-            <View style={styles.quantityRow}>
-              <Text style={styles.optionTitle}>Quantidade</Text>
-              <QuantitySelector value={quantity} maximum={maximum} onChange={setQuantity} />
-            </View>
+          {!isRemoteProduct && isCustomer ? (
+            <Text style={styles.demoCartNotice}>
+              Produtos demonstrativos e variantes locais não podem ser adicionados à sacola persistente.
+            </Text>
           ) : null}
         </View>
 
@@ -657,19 +678,42 @@ export function ProductDetailsScreen({ navigation, route }) {
             onToggleActive={toggleProductStatus}
           />
         </View>
-      ) : !isRemoteProduct && !cartConfirmationVisible ? (
+      ) : isPublicApiProduct && !cartConfirmationVisible ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 14) }]}>
           <View>
-            <Text style={styles.totalLabel}>Valor demonstrativo</Text>
-            <Text style={styles.total}>{formatCurrency(unitPrice * quantity)}</Text>
+            <Text style={styles.totalLabel}>Valor unitário</Text>
+            <Text style={styles.total}>{formatCurrency(unitPrice)}</Text>
+            {cartError ? (
+              <>
+                <Text style={styles.cartActionError}>{cartError}</Text>
+                <Pressable onPress={refreshCart} accessibilityRole="button">
+                  <Text style={styles.cartRetryText}>Tentar atualizar a sacola</Text>
+                </Pressable>
+              </>
+            ) : null}
           </View>
-          <Pressable disabled={stock <= 0} onPress={handleAdd} style={[styles.addButton, stock <= 0 && styles.disabledButton]}>
-            <Ionicons name="bag-add-outline" size={18} color={colors.white} />
-            <Text style={styles.addButtonText}>Adicionar ao carrinho</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!canAddToCart}
+            onPress={handleAdd}
+            style={[styles.addButton, !canAddToCart && styles.disabledButton]}
+          >
+            {addingToCart || isCartMutating || ['loading', 'refreshing'].includes(cartStatus) ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Ionicons name="bag-add-outline" size={18} color={colors.white} />
+            )}
+            <Text style={styles.addButtonText}>
+              {addingToCart || isCartMutating
+                ? 'Adicionando...'
+                : ['loading', 'refreshing', 'idle'].includes(cartStatus)
+                  ? 'Carregando sacola...'
+                  : 'Adicionar ao carrinho'}
+            </Text>
           </Pressable>
         </View>
       ) : null}
-      {!isRemoteProduct && !isAdministrator ? (
+      {isPublicApiProduct ? (
         <CartAddedBar
           visible={cartConfirmationVisible}
           itemCount={itemCount}
@@ -729,6 +773,7 @@ const styles = StyleSheet.create({
   name: { color: colors.ink, fontSize: 27, fontWeight: '800', marginTop: 7 },
   metadata: { color: colors.muted, fontSize: 12, marginTop: 6 },
   price: { color: colors.forest, fontSize: 21, fontWeight: '800', marginTop: 8 },
+  demoPriceLabel: { color: colors.muted, fontSize: 10, marginTop: 2 },
   description: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 13 },
   options: { marginTop: 23 },
   optionTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
@@ -746,6 +791,16 @@ const styles = StyleSheet.create({
   variantTextSelected: { color: colors.forest, fontWeight: '800' },
   availability: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 22 },
   availabilityText: { color: colors.forestLight, fontSize: 12, fontWeight: '700' },
+  demoAvailabilityText: { color: colors.muted },
+  demoCartNotice: {
+    color: colors.mutedStrong,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 14,
+    padding: 11,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+  },
   typeDescription: { color: colors.muted, fontSize: 11, marginTop: 6 },
   inventorySection: { marginTop: 24 },
   inventoryCard: {
@@ -787,7 +842,6 @@ const styles = StyleSheet.create({
   inventoryLowStockTextActive: { color: colors.danger },
   inventoryLowStockTextNormal: { color: colors.forest },
   inventoryUpdatedAt: { color: colors.muted, fontSize: 10, marginTop: 12 },
-  quantityRow: { marginTop: 21, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   recommendationSection: { marginTop: 24, marginBottom: 8 },
   recommendationList: { paddingHorizontal: 18, gap: 12, paddingBottom: 8 },
   bottomBar: {
@@ -803,6 +857,8 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: colors.muted, fontSize: 10 },
   total: { color: colors.forest, fontSize: 19, fontWeight: '800', marginTop: 2 },
+  cartActionError: { color: colors.danger, fontSize: 9, lineHeight: 13, maxWidth: 170, marginTop: 3 },
+  cartRetryText: { color: colors.forest, fontSize: 10, fontWeight: '700', marginTop: 2 },
   addButton: {
     minWidth: 168,
     height: 49,

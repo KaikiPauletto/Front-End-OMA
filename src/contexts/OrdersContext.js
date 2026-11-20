@@ -28,7 +28,7 @@ export function OrdersProvider({ children }) {
         quantity: item.quantity,
         variantId: item.variant?.id ?? null,
         variantName: item.variant?.name ?? null,
-        lineTotal: item.unitPrice * item.quantity,
+        lineTotal: item.estimatedSubtotal,
       })),
       address: { ...address, postalCode },
     };
