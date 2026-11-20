@@ -6,11 +6,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppButton } from '../components/AppButton';
 import { CartAddedBar } from '../components/CartAddedBar';
+import { InventoryOperationModal } from '../components/InventoryOperationModal';
 import { ProductImage } from '../components/ProductImage';
 import { ProductCard } from '../components/ProductCard';
 import { ProductAdminActions } from '../components/ProductAdminActions';
@@ -28,10 +31,21 @@ import {
 import { getCategoryLabel } from '../data/categories';
 import { ApiError } from '../services/apiClient';
 import {
+  adjustProductInventory,
   getProductInventory,
   InvalidInventoryResponseError,
+  listProductInventoryMovements,
+  registerInventoryEntry,
+  registerInventoryExit,
+  registerProductInventory,
+  setLowStockThreshold,
 } from '../services/inventoryService';
-import { normalizeNonNegativeInt64 } from '../services/int64';
+import { isDefinitiveMutationStatus } from '../services/postOutcome';
+import {
+  normalizeNonNegativeInt64,
+  normalizePositiveInt64,
+  normalizeSignedInt64,
+} from '../services/int64';
 import {
   getAdminProductById,
   getProductById,
@@ -41,9 +55,27 @@ import {
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
 
+const productMovementTypes = [
+  { value: 'all', label: 'Todos' },
+  { value: 'ENTRY', label: 'Entradas' },
+  { value: 'MANUAL_EXIT', label: 'Saídas' },
+  { value: 'ADJUSTMENT', label: 'Ajustes' },
+  { value: 'RESERVATION_CONFIRMATION', label: 'Reservas' },
+];
+
 function formatInventoryQuantity(value) {
   const normalized = normalizeNonNegativeInt64(value);
   return normalized?.replace(/\B(?=(\d{3})+(?!\d))/g, '.') ?? '—';
+}
+
+function formatInventoryDelta(value) {
+  const normalized = normalizeSignedInt64(value);
+  if (normalized === null) {
+    return '—';
+  }
+  const negative = normalized.startsWith('-');
+  const digits = negative ? normalized.slice(1) : normalized;
+  return `${negative ? '−' : '+'}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 }
 
 function formatInventoryTimestamp(value) {
@@ -82,6 +114,45 @@ function getInventoryErrorMessage(error) {
   return 'Falha de comunicação ao carregar o estoque. Verifique a conexão e tente novamente.';
 }
 
+function getInventoryOperationErrorMessage(error, operation) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return 'Sua sessão de administrador expirou. Entre novamente.';
+    }
+    if (error.status === 403) {
+      return 'Sua conta não tem autorização para esta operação.';
+    }
+    if (error.status === 404) {
+      return 'O registro de estoque não foi encontrado. Atualize os dados antes de continuar.';
+    }
+    if (error.status === 409) {
+      return 'A operação conflita com o saldo atual ou com o tipo do produto. Atualize os dados e revise a operação.';
+    }
+    if (error.status === 400) {
+      return error.message || 'Os dados da operação foram rejeitados pela API.';
+    }
+    if (error.status === 502 || error.status === 503 || error.status >= 500) {
+      return `Não foi possível confirmar a operação de ${operation}. Consulte o saldo e o histórico antes de qualquer nova tentativa.`;
+    }
+    return `A operação de ${operation} não foi concluída (HTTP ${error.status}).`;
+  }
+
+  if (error instanceof InvalidInventoryResponseError) {
+    return 'A API retornou dados incompatíveis. A operação não pode ser considerada confirmada.';
+  }
+  return `Falha de comunicação durante a operação de ${operation}. O resultado pode ser incerto; não repita antes de reconciliar.`;
+}
+
+function getMovementTypeLabel(type) {
+  const labels = {
+    ENTRY: 'Entrada',
+    MANUAL_EXIT: 'Saída manual',
+    ADJUSTMENT: 'Ajuste',
+    RESERVATION_CONFIRMATION: 'Confirmação de reserva',
+  };
+  return labels[type] ?? type;
+}
+
 export function ProductDetailsScreen({ navigation, route }) {
   const { user, token } = useAuth();
   const isAdministrator = user?.role === 'ADMINISTRADOR';
@@ -103,6 +174,21 @@ export function ProductDetailsScreen({ navigation, route }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [inventoryState, setInventoryState] = useState(null);
   const [inventoryReloadKey, setInventoryReloadKey] = useState(0);
+  const [inventoryMovementState, setInventoryMovementState] = useState(null);
+  const [inventoryMovementPage, setInventoryMovementPage] = useState(0);
+  const [inventoryMovementReloadKey, setInventoryMovementReloadKey] = useState(0);
+  const [movementTypeFilter, setMovementTypeFilter] = useState('all');
+  const [movementFromInput, setMovementFromInput] = useState('');
+  const [movementToInput, setMovementToInput] = useState('');
+  const [appliedMovementFilters, setAppliedMovementFilters] = useState({});
+  const [movementFilterError, setMovementFilterError] = useState('');
+  const [inventoryOperation, setInventoryOperation] = useState(null);
+  const [inventoryOperationError, setInventoryOperationError] = useState('');
+  const [isInventoryOperationSaving, setIsInventoryOperationSaving] = useState(false);
+  const [inventoryOperationUncertain, setInventoryOperationUncertain] = useState(false);
+  const [reconciliationStatus, setReconciliationStatus] = useState('idle');
+  const [reconciliationError, setReconciliationError] = useState('');
+  const inventoryOperationLock = useRef(false);
   const remoteProduct = apiProduct?.id === String(productId) &&
     apiProductAdminOrigin === isAdminOrigin
     ? apiProduct
@@ -115,6 +201,10 @@ export function ProductDetailsScreen({ navigation, route }) {
   const adminProductType = remoteProduct?.productType;
   const currentInventoryState = inventoryState?.productId === String(productId)
     ? inventoryState
+    : null;
+  const inventoryStatus = currentInventoryState?.status ?? 'loading';
+  const currentInventoryMovementState = inventoryMovementState?.productId === String(productId)
+    ? inventoryMovementState
     : null;
   const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
   const [addingToCart, setAddingToCart] = useState(false);
@@ -215,6 +305,7 @@ export function ProductDetailsScreen({ navigation, route }) {
           setInventoryState({
             productId: requestedProductId,
             status: 'error',
+            httpStatus: error instanceof ApiError ? error.status : null,
             message: getInventoryErrorMessage(error),
           });
         }
@@ -231,6 +322,73 @@ export function ProductDetailsScreen({ navigation, route }) {
     token,
     inventoryReloadKey,
   ]);
+
+  useEffect(() => {
+    let active = true;
+    const requestedProductId = String(productId);
+    if (
+      !isAdminOrigin ||
+      !isAdminProductLoaded ||
+      !token ||
+      currentInventoryState?.status !== 'success'
+    ) {
+      setInventoryMovementState(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    setInventoryMovementState({
+      productId: requestedProductId,
+      status: 'loading',
+    });
+    listProductInventoryMovements(productId, token, {
+      ...appliedMovementFilters,
+      page: inventoryMovementPage,
+      size: 5,
+    })
+      .then((result) => {
+        if (active) {
+          setInventoryMovementState({
+            productId: requestedProductId,
+            status: 'success',
+            ...result,
+          });
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setInventoryMovementState({
+            productId: requestedProductId,
+            status: 'error',
+            message: getInventoryErrorMessage(error),
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    isAdminOrigin,
+    isAdminProductLoaded,
+    productId,
+    token,
+    currentInventoryState?.status,
+    appliedMovementFilters,
+    inventoryMovementPage,
+    inventoryMovementReloadKey,
+  ]);
+
+  useEffect(() => {
+    if (!inventoryOperationUncertain || reconciliationStatus === 'done') {
+      return undefined;
+    }
+
+    return navigation.addListener('beforeRemove', (event) => {
+      event.preventDefault();
+    });
+  }, [navigation, inventoryOperationUncertain, reconciliationStatus]);
 
   const variant = product?.variants?.find((item) => item.id === variantId)
     ?? product?.variants?.[0]
@@ -428,6 +586,190 @@ export function ProductDetailsScreen({ navigation, route }) {
     return true;
   }
 
+  function openInventoryOperation(operation) {
+    if (
+      !isAdminOrigin ||
+      (currentInventoryState?.status !== 'success' && operation !== 'registration') ||
+      inventoryOperationUncertain ||
+      inventoryOperationLock.current
+    ) {
+      return;
+    }
+
+    setInventoryOperationError('');
+    setInventoryOperation(operation);
+  }
+
+  async function confirmInventoryOperation(operation, payload) {
+    if (
+      inventoryOperationLock.current ||
+      inventoryOperationUncertain ||
+      !isAdminOrigin ||
+      typeof token !== 'string' ||
+      !token.trim()
+    ) {
+      return { ok: false };
+    }
+
+    const operationKeys = {
+      registration: 'inventoryRegistration',
+      entry: 'inventoryEntry',
+      exit: 'inventoryExit',
+      adjustment: 'inventoryAdjustment',
+      threshold: 'inventoryThreshold',
+    };
+    inventoryOperationLock.current = true;
+    setIsInventoryOperationSaving(true);
+    setInventoryOperationError('');
+
+    try {
+      let updatedInventory;
+      if (operation === 'registration') {
+        updatedInventory = await registerProductInventory(
+          productId,
+          adminProductType,
+          token,
+        );
+      } else if (operation === 'entry') {
+        updatedInventory = await registerInventoryEntry(
+          productId,
+          adminProductType,
+          payload.quantity,
+          payload.reason,
+          token,
+        );
+      } else if (operation === 'exit') {
+        updatedInventory = await registerInventoryExit(
+          productId,
+          adminProductType,
+          payload.quantity,
+          payload.reason,
+          token,
+        );
+      } else if (operation === 'adjustment') {
+        updatedInventory = await adjustProductInventory(
+          productId,
+          adminProductType,
+          payload.newQuantity,
+          payload.reason,
+          token,
+        );
+      } else {
+        updatedInventory = await setLowStockThreshold(
+          productId,
+          adminProductType,
+          payload.threshold,
+          token,
+        );
+      }
+
+      setInventoryState({
+        productId: String(productId),
+        status: 'success',
+        inventory: updatedInventory,
+      });
+      setInventoryOperationError('');
+      setInventoryOperationUncertain(false);
+      if (['entry', 'exit', 'adjustment'].includes(operation)) {
+        setInventoryMovementPage(0);
+        setInventoryMovementReloadKey((key) => key + 1);
+      }
+      return { ok: true };
+    } catch (error) {
+      const isDefinitiveRejection = error instanceof ApiError &&
+        isDefinitiveMutationStatus(error.status, operationKeys[operation]);
+      setInventoryOperationError(getInventoryOperationErrorMessage(error, operation));
+      if (!isDefinitiveRejection) {
+        setInventoryOperationUncertain(true);
+        setReconciliationStatus('idle');
+        setReconciliationError('');
+      }
+      return { ok: false, uncertain: !isDefinitiveRejection };
+    } finally {
+      inventoryOperationLock.current = false;
+      setIsInventoryOperationSaving(false);
+    }
+  }
+
+  async function reconcileInventoryOperation() {
+    if (reconciliationStatus === 'loading') {
+      return;
+    }
+    setReconciliationStatus('loading');
+    setReconciliationError('');
+
+    try {
+      const inventory = await getProductInventory(productId, adminProductType, token);
+      setInventoryState({
+        productId: String(productId),
+        status: 'success',
+        inventory,
+      });
+      const movements = await listProductInventoryMovements(productId, token, {
+        page: 0,
+        size: 5,
+      });
+      setInventoryMovementPage(0);
+      setInventoryMovementState({
+        productId: String(productId),
+        status: 'success',
+        ...movements,
+      });
+      setInventoryMovementReloadKey((key) => key + 1);
+      setReconciliationStatus('done');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        setInventoryState({
+          productId: String(productId),
+          status: 'error',
+          httpStatus: 404,
+          message: getInventoryErrorMessage(error),
+        });
+        setInventoryMovementState(null);
+        setReconciliationStatus('done');
+        return;
+      }
+      setReconciliationError(getInventoryErrorMessage(error));
+      setReconciliationStatus('error');
+    }
+  }
+
+  function finishInventoryReconciliation() {
+    if (reconciliationStatus !== 'done') {
+      return;
+    }
+    setInventoryOperationUncertain(false);
+    setInventoryOperationError('');
+    setInventoryOperation(null);
+    setReconciliationStatus('idle');
+    setReconciliationError('');
+  }
+
+  function applyProductMovementFilters() {
+    if (movementFromInput && (
+      Number.isNaN(Date.parse(movementFromInput)) ||
+      !/T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(movementFromInput)
+    )) {
+      setMovementFilterError('A data inicial deve usar o formato ISO-8601.');
+      return;
+    }
+    if (movementToInput && (
+      Number.isNaN(Date.parse(movementToInput)) ||
+      !/T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(movementToInput)
+    )) {
+      setMovementFilterError('A data final deve usar o formato ISO-8601.');
+      return;
+    }
+
+    setMovementFilterError('');
+    setInventoryMovementPage(0);
+    setAppliedMovementFilters({
+      movementType: movementTypeFilter === 'all' ? undefined : movementTypeFilter,
+      from: movementFromInput.trim() || undefined,
+      to: movementToInput.trim() || undefined,
+    });
+  }
+
   async function handleAddRecommendation(recommendedProduct) {
     try {
       const result = await addItem(recommendedProduct);
@@ -542,22 +884,33 @@ export function ProductDetailsScreen({ navigation, route }) {
             <View style={styles.inventorySection}>
               <View style={styles.inventoryCard}>
                 <Text style={[styles.optionTitle, styles.inventoryTitle]}>Estoque</Text>
-                {!currentInventoryState || currentInventoryState.status === 'loading' ? (
+                {inventoryStatus === 'loading' ? (
                   <View style={styles.inventoryState}>
                     <ActivityIndicator color={colors.forest} />
                     <Text style={styles.inventoryStateText}>Carregando estoque...</Text>
                   </View>
-                ) : currentInventoryState.status === 'error' ? (
+                ) : inventoryStatus === 'error' ? (
                   <View style={styles.inventoryState}>
                     <Text style={styles.inventoryErrorText}>
                       {currentInventoryState.message}
                     </Text>
+                    {currentInventoryState.httpStatus === 404 ? (
+                      <AppButton
+                        title="Registrar no inventário"
+                        onPress={() => openInventoryOperation('registration')}
+                        style={styles.inventoryActionButton}
+                      />
+                    ) : null}
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => setInventoryReloadKey((key) => key + 1)}
                       style={styles.inventoryRetry}
                     >
-                      <Text style={styles.inventoryRetryText}>Tentar novamente</Text>
+                      <Text style={styles.inventoryRetryText}>
+                        {currentInventoryState.httpStatus === 404
+                          ? 'Consultar novamente'
+                          : 'Tentar novamente'}
+                      </Text>
                     </Pressable>
                   </View>
                 ) : (
@@ -610,9 +963,157 @@ export function ProductDetailsScreen({ navigation, route }) {
                         Atualizado em {formatInventoryTimestamp(currentInventoryState.inventory.updatedAt)}
                       </Text>
                     ) : null}
+                    <View style={styles.inventoryActions}>
+                      {[
+                        ['entry', 'Entrada', 'add-circle-outline'],
+                        ['exit', 'Saída manual', 'remove-circle-outline'],
+                        ['adjustment', 'Ajustar saldo', 'options-outline'],
+                        ['threshold', 'Limite baixo', 'warning-outline'],
+                      ].map(([operation, title, icon]) => (
+                        <AppButton
+                          key={operation}
+                          title={title}
+                          variant="outline"
+                          size="small"
+                          icon={icon}
+                          disabled={inventoryOperationUncertain || isInventoryOperationSaving}
+                          onPress={() => openInventoryOperation(operation)}
+                          style={styles.inventoryActionButton}
+                          textStyle={styles.inventoryActionText}
+                        />
+                      ))}
+                    </View>
                   </>
                 )}
               </View>
+              {inventoryStatus === 'success' ? (
+                <View style={styles.inventoryMovementsCard}>
+                  <Text style={styles.inventoryMovementTitle}>Histórico de movimentações</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.inventoryMovementFilters}
+                  >
+                    {productMovementTypes.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: movementTypeFilter === option.value }}
+                        onPress={() => setMovementTypeFilter(option.value)}
+                        style={[
+                          styles.inventoryMovementFilter,
+                          movementTypeFilter === option.value && styles.inventoryMovementFilterSelected,
+                        ]}
+                      >
+                        <Text style={[
+                          styles.inventoryMovementFilterText,
+                          movementTypeFilter === option.value && styles.inventoryMovementFilterTextSelected,
+                        ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  <View style={styles.inventoryMovementDates}>
+                    <TextInput
+                      accessibilityLabel="Data inicial das movimentações ISO-8601"
+                      onChangeText={setMovementFromInput}
+                      placeholder="De: 2026-11-20T00:00:00Z"
+                      style={[styles.inventoryMovementInput, styles.inventoryMovementDateInput]}
+                      value={movementFromInput}
+                    />
+                    <TextInput
+                      accessibilityLabel="Data final das movimentações ISO-8601"
+                      onChangeText={setMovementToInput}
+                      placeholder="Até: 2026-11-20T23:59:59Z"
+                      style={[styles.inventoryMovementInput, styles.inventoryMovementDateInput]}
+                      value={movementToInput}
+                    />
+                  </View>
+                  {movementFilterError ? (
+                    <Text style={styles.inventoryErrorText}>{movementFilterError}</Text>
+                  ) : null}
+                  <AppButton
+                    title="Filtrar histórico"
+                    size="small"
+                    onPress={applyProductMovementFilters}
+                    style={styles.applyMovementFilters}
+                  />
+
+                  {!currentInventoryMovementState ||
+                    currentInventoryMovementState.status === 'loading' ? (
+                      <View style={styles.inventoryState}>
+                        <ActivityIndicator color={colors.forest} />
+                        <Text style={styles.inventoryStateText}>Carregando movimentações...</Text>
+                      </View>
+                    ) : currentInventoryMovementState.status === 'error' ? (
+                      <View style={styles.inventoryState}>
+                        <Text style={styles.inventoryErrorText}>
+                          {currentInventoryMovementState.message}
+                        </Text>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => setInventoryMovementReloadKey((key) => key + 1)}
+                          style={styles.inventoryRetry}
+                        >
+                          <Text style={styles.inventoryRetryText}>Tentar carregar histórico</Text>
+                        </Pressable>
+                      </View>
+                    ) : currentInventoryMovementState.items.length === 0 ? (
+                      <Text style={styles.noInventoryMovements}>
+                        Nenhuma movimentação encontrada para os filtros selecionados.
+                      </Text>
+                    ) : (
+                      <>
+                        {currentInventoryMovementState.items.map((movement) => (
+                          <View key={String(movement.id)} style={styles.inventoryMovementRow}>
+                            <View style={styles.inventoryMovementCopy}>
+                              <Text style={styles.inventoryMovementLabel}>
+                                {getMovementTypeLabel(movement.movementType)}
+                                {' · '}
+                                {formatInventoryTimestamp(movement.createdAt)}
+                              </Text>
+                              <Text style={styles.inventoryMovementReason}>
+                                {movement.reason?.trim() || 'Sem motivo informado'}
+                              </Text>
+                            </View>
+                            <Text style={[
+                              styles.inventoryMovementDelta,
+                              normalizeSignedInt64(movement.quantityDelta)?.startsWith('-')
+                                ? styles.inventoryMovementDeltaNegative
+                                : styles.inventoryMovementDeltaPositive,
+                            ]}
+                            >
+                              {formatInventoryDelta(movement.quantityDelta)}
+                            </Text>
+                          </View>
+                        ))}
+                        {currentInventoryMovementState.totalPages > 1 ? (
+                          <View style={styles.inventoryMovementPagination}>
+                            <Pressable
+                              accessibilityRole="button"
+                              disabled={currentInventoryMovementState.page === 0}
+                              onPress={() => setInventoryMovementPage((page) => Math.max(0, page - 1))}
+                            >
+                              <Text style={styles.inventoryMovementPageButton}>Anterior</Text>
+                            </Pressable>
+                            <Text style={styles.inventoryMovementPageLabel}>
+                              {currentInventoryMovementState.page + 1} / {currentInventoryMovementState.totalPages}
+                            </Text>
+                            <Pressable
+                              accessibilityRole="button"
+                              disabled={currentInventoryMovementState.page + 1 >= currentInventoryMovementState.totalPages}
+                              onPress={() => setInventoryMovementPage((page) => page + 1)}
+                            >
+                              <Text style={styles.inventoryMovementPageButton}>Próxima</Text>
+                            </Pressable>
+                          </View>
+                        ) : null}
+                      </>
+                    )}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -737,6 +1238,29 @@ export function ProductDetailsScreen({ navigation, route }) {
             onCancel={() => setDeactivationModalVisible(false)}
             onConfirm={confirmProductDeactivation}
           />
+          {isAdminOrigin ? (
+            <InventoryOperationModal
+              visible={Boolean(inventoryOperation)}
+              operation={inventoryOperation}
+              inventory={currentInventoryState?.inventory ?? {}}
+              productType={adminProductType}
+              isSaving={isInventoryOperationSaving}
+              error={inventoryOperationError}
+              uncertain={inventoryOperationUncertain}
+              reconciliationStatus={reconciliationStatus}
+              reconciliationError={reconciliationError}
+              onCancel={() => {
+                if (!inventoryOperationUncertain) {
+                  setInventoryOperation(null);
+                  setInventoryOperationError('');
+                }
+              }}
+              onConfirm={confirmInventoryOperation}
+              onReconcile={reconcileInventoryOperation}
+              onFinishReconciliation={finishInventoryReconciliation}
+              onClearError={() => setInventoryOperationError('')}
+            />
+          ) : null}
         </>
       ) : null}
     </View>
@@ -842,6 +1366,84 @@ const styles = StyleSheet.create({
   inventoryLowStockTextActive: { color: colors.danger },
   inventoryLowStockTextNormal: { color: colors.forest },
   inventoryUpdatedAt: { color: colors.muted, fontSize: 10, marginTop: 12 },
+  inventoryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+  },
+  inventoryActionButton: { flexGrow: 1, flexBasis: '47%', minHeight: 40 },
+  inventoryActionText: { fontSize: 9 },
+  inventoryMovementsCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 14,
+  },
+  inventoryMovementTitle: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  inventoryMovementFilters: { flexDirection: 'row', gap: 7, paddingVertical: 12 },
+  inventoryMovementFilter: {
+    minHeight: 32,
+    justifyContent: 'center',
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+  },
+  inventoryMovementFilterSelected: {
+    borderColor: colors.forest,
+    backgroundColor: colors.sage,
+  },
+  inventoryMovementFilterText: { color: colors.mutedStrong, fontSize: 10, fontWeight: '700' },
+  inventoryMovementFilterTextSelected: { color: colors.forest },
+  inventoryMovementDates: { flexDirection: 'row', gap: 8 },
+  inventoryMovementInput: {
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    color: colors.ink,
+    backgroundColor: colors.surface,
+    fontSize: 9,
+  },
+  inventoryMovementDateInput: { flex: 1, minWidth: 0 },
+  applyMovementFilters: { alignSelf: 'flex-start', minHeight: 36, marginTop: 8 },
+  noInventoryMovements: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingVertical: 18,
+  },
+  inventoryMovementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 11,
+  },
+  inventoryMovementCopy: { flex: 1 },
+  inventoryMovementLabel: { color: colors.ink, fontSize: 11, fontWeight: '700' },
+  inventoryMovementReason: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
+  inventoryMovementDelta: { fontSize: 14, fontWeight: '800' },
+  inventoryMovementDeltaPositive: { color: colors.forest },
+  inventoryMovementDeltaNegative: { color: colors.danger },
+  inventoryMovementPagination: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+  },
+  inventoryMovementPageButton: { color: colors.forest, fontSize: 11, fontWeight: '800', padding: 6 },
+  inventoryMovementPageLabel: { color: colors.muted, fontSize: 10, fontWeight: '700' },
   recommendationSection: { marginTop: 24, marginBottom: 8 },
   recommendationList: { paddingHorizontal: 18, gap: 12, paddingBottom: 8 },
   bottomBar: {

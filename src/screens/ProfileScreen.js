@@ -91,6 +91,20 @@ export function ProfileScreen({ navigation }) {
             ))}
           </View>
         ) : null}
+        {isAdministrator ? (
+          <View style={styles.menu}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Gerenciar estoque"
+              onPress={() => navigation.navigate('Inventory')}
+              style={styles.option}
+            >
+              <Ionicons name="cube-outline" size={20} color={colors.forest} />
+              <Text style={styles.optionText}>Gerenciar estoque</Text>
+              <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+            </Pressable>
+          </View>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: isSigningOut, busy: isSigningOut }}

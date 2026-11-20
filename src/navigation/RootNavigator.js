@@ -18,6 +18,7 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { SellerProductsScreen } from '../screens/SellerProductsScreen';
 import { AddSellerProductScreen } from '../screens/AddSellerProductScreen';
 import { AnalyticsScreen } from '../screens/AnalyticsScreen';
+import { InventoryScreen } from '../screens/InventoryScreen';
 import { AboutOMAScreen } from '../screens/AboutOMAScreen';
 import { SubcategoriesScreen } from '../screens/SubcategoriesScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
@@ -30,6 +31,7 @@ const Tab = createBottomTabNavigator();
 function AccountStack() {
   const { user } = useAuth();
   const isCustomer = user?.role === 'CLIENTE';
+  const isAdministrator = user?.role === 'ADMINISTRADOR';
 
   return (
     <Stack.Navigator
@@ -41,6 +43,7 @@ function AccountStack() {
     >
       <Stack.Screen name="ContaHome" component={ProfileScreen} />
       {isCustomer ? <Stack.Screen name="Pedidos" component={OrdersScreen} /> : null}
+      {isAdministrator ? <Stack.Screen name="Inventory" component={InventoryScreen} /> : null}
     </Stack.Navigator>
   );
 }
