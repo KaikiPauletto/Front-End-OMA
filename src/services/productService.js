@@ -382,6 +382,97 @@ export async function listAdminProducts({
   };
 }
 
+export async function listAdminConfirmedSales({ page = 0, size = 20, token }) {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new Error('A página de vendas solicitada é inválida.');
+  }
+  if (!Number.isInteger(size) || size < 1 || size > 100) {
+    throw new Error('A quantidade de vendas por página é inválida.');
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const query = queryString({
+    status: 'CONFIRMED',
+    page,
+    size,
+    sort: 'confirmedAt,desc',
+  });
+  const response = await apiRequest(
+    `/ws/admin/orders?${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    { parseJson: parseJsonPreservingInt64 },
+  );
+
+  if (
+    !isRecord(response) ||
+    !Array.isArray(response.content) ||
+    !Number.isInteger(response.number) ||
+    !Number.isInteger(response.totalPages) ||
+    !isNonNegativeInt64(response.totalElements)
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  const sales = response.content.flatMap((order) => {
+    if (
+      !isRecord(order) ||
+      !hasIdentifier(order.id) ||
+      order.status !== 'CONFIRMED' ||
+      !Array.isArray(order.items)
+    ) {
+      throw new InvalidCatalogResponseError();
+    }
+
+    return order.items.map((item) => {
+      if (!isRecord(item) || !hasIdentifier(item.productId)) {
+        throw new InvalidCatalogResponseError();
+      }
+
+      const product = isRecord(item.product) ? item.product : {};
+      const productName = item.productName ?? product.name;
+      const productImage = item.productImage ?? product.image;
+      const quantity = Number(item.quantity);
+      const subtotal = Number(item.subtotal);
+
+      if (
+        typeof productName !== 'string' ||
+        !Number.isFinite(quantity) ||
+        quantity <= 0 ||
+        !Number.isFinite(subtotal)
+      ) {
+        throw new InvalidCatalogResponseError();
+      }
+
+      return {
+        id: `${order.id}:${item.id ?? item.productId}`,
+        orderId: String(order.id),
+        orderDate: order.confirmedAt ?? order.orderDate,
+        productId: String(item.productId),
+        productName,
+        productImage: typeof productImage === 'string' && productImage.trim()
+          ? { uri: productImage }
+          : null,
+        productCategoryName: item.categoryName ?? item.subcategoryName ?? product.categoryName ?? '',
+        quantity,
+        subtotal,
+      };
+    });
+  });
+
+  return {
+    sales,
+    page: response.number,
+    totalPages: response.totalPages,
+    totalOrders: response.totalElements,
+  };
+}
+
 export async function listCategories() {
   const response = await apiRequest('/categories');
   if (!Array.isArray(response)) {

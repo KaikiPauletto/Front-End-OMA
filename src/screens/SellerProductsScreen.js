@@ -13,15 +13,27 @@ import { AppHeader } from '../components/AppHeader';
 import { ProductImage } from '../components/ProductImage';
 import { useAuth } from '../contexts/AuthContext';
 import { getCategoryLabel } from '../data/categories';
-import { listAdminProducts } from '../services/productService';
+import { listAdminConfirmedSales, listAdminProducts } from '../services/productService';
 import { colors } from '../theme/colors';
+import { formatCurrency } from '../utils/formatCurrency';
 
 const PAGE_SIZE = 10;
 const statusOptions = [
   { value: 'ACTIVE', label: 'Ativos' },
   { value: 'INACTIVE', label: 'Inativos' },
   { value: 'ALL', label: 'Todos' },
+  { value: 'SOLD', label: 'Vendidos' },
 ];
+
+function getSaleDateLabel(value) {
+  if (typeof value !== 'string') {
+    return 'Data indisponível';
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Data indisponível'
+    : date.toLocaleString('pt-BR');
+}
 
 export function SellerProductsScreen({ navigation }) {
   const { token } = useAuth();
@@ -68,19 +80,23 @@ export function SellerProductsScreen({ navigation }) {
     setLoadingMore(false);
     loadMoreLock.current = false;
 
-    listAdminProducts({
-      status,
-      sort: 'description,asc',
-      page: 0,
-      size: PAGE_SIZE,
-      token,
-    })
+    const request = status === 'SOLD'
+      ? listAdminConfirmedSales({ page: 0, size: PAGE_SIZE, token })
+      : listAdminProducts({
+        status,
+        sort: 'description,asc',
+        page: 0,
+        size: PAGE_SIZE,
+        token,
+      });
+
+    request
       .then((result) => {
         if (active && requestVersion.current === version) {
-          setProducts(result.products);
+          setProducts(status === 'SOLD' ? result.sales : result.products);
           setPage(result.page);
           setTotalPages(result.totalPages);
-          setTotalElements(result.totalElements);
+          setTotalElements(status === 'SOLD' ? result.totalOrders : result.totalElements);
         }
       })
       .catch((loadError) => {
@@ -133,19 +149,22 @@ export function SellerProductsScreen({ navigation }) {
     const version = requestVersion.current;
 
     try {
-      const result = await listAdminProducts({
-        status,
-        sort: 'description,asc',
-        page: page + 1,
-        size: PAGE_SIZE,
-        token,
-      });
+      const result = status === 'SOLD'
+        ? await listAdminConfirmedSales({ page: page + 1, size: PAGE_SIZE, token })
+        : await listAdminProducts({
+          status,
+          sort: 'description,asc',
+          page: page + 1,
+          size: PAGE_SIZE,
+          token,
+        });
 
       if (requestVersion.current === version) {
-        setProducts((currentProducts) => [...currentProducts, ...result.products]);
+        const nextProducts = status === 'SOLD' ? result.sales : result.products;
+        setProducts((currentProducts) => [...currentProducts, ...nextProducts]);
         setPage(result.page);
         setTotalPages(result.totalPages);
-        setTotalElements(result.totalElements);
+        setTotalElements(status === 'SOLD' ? result.totalOrders : result.totalElements);
       }
     } catch (loadError) {
       if (requestVersion.current === version) {
@@ -162,6 +181,40 @@ export function SellerProductsScreen({ navigation }) {
   }
 
   function renderProduct({ item: product }) {
+    if (status === 'SOLD') {
+      return (
+        <View style={styles.productCard}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Visualizar ${product.productName}, vendido no pedido ${product.orderId}`}
+            onPress={() => navigation.navigate('ProductDetails', {
+              productId: product.productId,
+              source: 'admin',
+            })}
+            style={styles.productContent}
+          >
+            <ProductImage
+              accessibilityLabel={product.productName}
+              fallbackEmoji="🧉"
+              resizeMode="cover"
+              source={product.productImage}
+              style={styles.productImage}
+            />
+            <View style={styles.productDetails}>
+              <View style={[styles.statusBadge, styles.confirmedBadge]}>
+                <Text style={[styles.statusText, styles.confirmedText]}>Venda confirmada</Text>
+              </View>
+              <Text numberOfLines={2} style={styles.productName}>{product.productName}</Text>
+              <Text style={styles.category}>Pedido #{product.orderId} · {getSaleDateLabel(product.orderDate)}</Text>
+              <Text style={styles.saleDetails}>
+                Quantidade: {product.quantity} · {formatCurrency(product.subtotal)}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+      );
+    }
+
     const isActive = product.active !== false;
 
     return (
@@ -213,7 +266,9 @@ export function SellerProductsScreen({ navigation }) {
       return (
         <View style={styles.emptyState}>
           <ActivityIndicator color={colors.forest} />
-          <Text style={styles.stateText}>Carregando produtos...</Text>
+          <Text style={styles.stateText}>
+            {status === 'SOLD' ? 'Carregando vendas...' : 'Carregando produtos...'}
+          </Text>
         </View>
       );
     }
@@ -233,8 +288,14 @@ export function SellerProductsScreen({ navigation }) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="pricetags-outline" size={32} color={colors.muted} />
-        <Text style={styles.emptyTitle}>Nenhum produto encontrado</Text>
-        <Text style={styles.stateText}>Não há produtos para este filtro.</Text>
+        <Text style={styles.emptyTitle}>
+          {status === 'SOLD' ? 'Nenhuma venda confirmada' : 'Nenhum produto encontrado'}
+        </Text>
+        <Text style={styles.stateText}>
+          {status === 'SOLD'
+            ? 'Os itens de pedidos confirmados aparecerão aqui.'
+            : 'Não há produtos para este filtro.'}
+        </Text>
       </View>
     );
   }
@@ -271,7 +332,11 @@ export function SellerProductsScreen({ navigation }) {
         showMenu={false}
         title="Minhas Vendas"
       />
-      <Text style={styles.subtitle}>Acompanhe os produtos cadastrados na sua loja.</Text>
+      <Text style={styles.subtitle}>
+        {status === 'SOLD'
+          ? 'Consulte os produtos de pedidos confirmados.'
+          : 'Acompanhe os produtos cadastrados na sua loja.'}
+      </Text>
 
       <View style={styles.statusFilters} accessibilityRole="tablist">
         {statusOptions.map((option) => {
@@ -294,8 +359,10 @@ export function SellerProductsScreen({ navigation }) {
 
       <Text style={styles.resultCount}>
         {loading
-          ? 'Carregando produtos...'
-          : `${totalElements} ${totalElements === 1 || totalElements === '1' ? 'produto' : 'produtos'}`}
+          ? status === 'SOLD' ? 'Carregando vendas...' : 'Carregando produtos...'
+          : status === 'SOLD'
+            ? `${totalElements} ${totalElements === 1 || totalElements === '1' ? 'pedido confirmado' : 'pedidos confirmados'}`
+            : `${totalElements} ${totalElements === 1 || totalElements === '1' ? 'produto' : 'produtos'}`}
       </Text>
 
       <FlatList
@@ -355,12 +422,15 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
   statusBadge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   activeBadge: { backgroundColor: colors.sage },
+  confirmedBadge: { backgroundColor: colors.sage, alignSelf: 'flex-start', marginBottom: 5 },
   inactiveBadge: { backgroundColor: colors.clayLight },
   statusText: { fontSize: 10, fontWeight: '800' },
   activeText: { color: colors.forest },
   inactiveText: { color: colors.clay },
+  confirmedText: { color: colors.forest },
   productName: { color: colors.ink, fontSize: 13, fontWeight: '800', lineHeight: 18 },
   category: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  saleDetails: { color: colors.ink, fontSize: 11, fontWeight: '700', marginTop: 5 },
   emptyState: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 52 },
   emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: '700', textAlign: 'center', marginTop: 12 },
   stateText: { color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 10 },

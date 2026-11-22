@@ -95,7 +95,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'HOME' }} />
       {isAdministrator ? (
-        <Tab.Screen name="Vendas" component={SellerProductsScreen} options={{ tabBarLabel: 'VENDAS' }} />
+        <Tab.Screen name="Vendas" component={SellerProductsScreen} options={{ tabBarLabel: 'PRODUTOS' }} />
       ) : (
         <Tab.Screen
           name="Categorias"
