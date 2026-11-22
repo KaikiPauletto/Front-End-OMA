@@ -57,13 +57,6 @@ function getSubcategorySelection(product) {
     : null;
 }
 
-function getImageUrl(image) {
-  if (typeof image === 'string') {
-    return image;
-  }
-  return typeof image?.uri === 'string' ? image.uri : '';
-}
-
 function getSaveErrorMessage(error) {
   return error instanceof Error
     ? error.message
@@ -84,7 +77,7 @@ export function ProductEditModal({
   const [model, setModel] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState(null);
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageAsset, setImageAsset] = useState(null);
   const [priceInput, setPriceInput] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [selectingSubcategory, setSelectingSubcategory] = useState(false);
@@ -106,7 +99,7 @@ export function ProductEditModal({
     setModel(product.model ?? '');
     setDescription(product.description ?? '');
     setImage(product.image ?? null);
-    setImageUrl(getImageUrl(product.image));
+    setImageAsset(null);
     setPriceInput(formatPrice(String(Math.round(price * 100))));
     setSelectedSubcategory(remote ? null : getSubcategorySelection(product));
     setSelectingSubcategory(false);
@@ -194,6 +187,7 @@ export function ProductEditModal({
       });
 
       if (!result.canceled && result.assets[0]) {
+        setImageAsset(result.assets[0]);
         setImage({ uri: result.assets[0].uri });
       }
     } catch (error) {
@@ -245,10 +239,10 @@ export function ProductEditModal({
       model: model.trim(),
       description: description.trim(),
       price: parsedPrice,
-      image: remote ? imageUrl.trim() || null : image,
       ...(remote
         ? { currency: currency.trim(), subcategoryId }
         : {
+          image,
           category: selectedSubcategory.categoryId,
           subcategory: selectedSubcategory.id,
         }),
@@ -258,7 +252,7 @@ export function ProductEditModal({
     setIsSaving(true);
     setSubmitError('');
     try {
-      await onSave(editedProduct);
+      await onSave(editedProduct, remote ? imageAsset : null);
     } catch (error) {
       setSubmitError(getSaveErrorMessage(error));
     } finally {
@@ -365,17 +359,26 @@ export function ProductEditModal({
                 >
                   {remote ? (
                     <>
-                      <Text style={styles.label}>URL da imagem (opcional)</Text>
-                      <TextInput
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        keyboardType="url"
-                        onChangeText={handleFieldChange(setImageUrl)}
-                        placeholder="https://..."
-                        placeholderTextColor={colors.muted}
-                        style={styles.input}
-                        value={imageUrl}
-                      />
+                      <Text style={styles.label}>Imagem do produto (opcional)</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleSelectImage}
+                        style={styles.imagePicker}
+                      >
+                        {image ? (
+                          <ProductImage
+                            source={image}
+                            style={styles.preview}
+                            resizeMode="cover"
+                            accessibilityLabel={name || 'Imagem do produto'}
+                          />
+                        ) : (
+                          <>
+                            <Ionicons name="camera-outline" size={26} color={colors.forest} />
+                            <Text style={styles.imagePickerText}>Selecionar imagem do dispositivo</Text>
+                          </>
+                        )}
+                      </Pressable>
                     </>
                   ) : (
                     <>

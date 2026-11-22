@@ -51,6 +51,7 @@ import {
   getProductById,
   setProductActive as setRemoteProductActive,
   updateProduct as updateRemoteProduct,
+  uploadProductImage,
 } from '../services/productService';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -493,8 +494,11 @@ export function ProductDetailsScreen({ navigation, route }) {
     }
   }
 
-  async function handleSaveEdits(editedProduct) {
+  async function handleSaveEdits(editedProduct, imageAsset) {
     if (isRemoteProduct) {
+      if (imageAsset) {
+        await uploadProductImage(product.id, imageAsset, token);
+      }
       await updateRemoteProduct(product.id, editedProduct, token);
       setEditModalVisible(false);
       setCartConfirmationVisible(false);

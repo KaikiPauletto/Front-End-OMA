@@ -157,6 +157,68 @@ export async function updateProduct(productId, product, token) {
   return response.data;
 }
 
+export async function uploadProductImage(productId, asset, token) {
+  if (!hasIdentifier(productId)) {
+    throw new Error('O identificador do produto é inválido.');
+  }
+  if (!asset?.uri) {
+    throw new Error('Selecione uma imagem válida.');
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+
+  const uri = asset.uri;
+  const extension = (asset.fileName || uri.split('?')[0]).split('.').pop()?.toLowerCase();
+  const supportedExtension = ['jpg', 'jpeg', 'png', 'webp'].includes(extension);
+  const mimeType = asset.mimeType || (supportedExtension && extension === 'png'
+    ? 'image/png'
+    : supportedExtension && extension === 'webp'
+      ? 'image/webp'
+      : 'image/jpeg');
+  const fileName = asset.fileName || `produto.${supportedExtension ? extension : 'jpg'}`;
+  const formData = new FormData();
+
+  if (typeof window !== 'undefined' && typeof File !== 'undefined') {
+    let file = asset.file;
+
+    if (!file) {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error('Não foi possível ler o arquivo de imagem selecionado.');
+      }
+      const blob = await response.blob();
+      file = new File([blob], fileName, { type: blob.type || mimeType });
+    }
+
+    formData.append('file', file, fileName);
+  } else {
+    formData.append('file', {
+      uri,
+      name: fileName,
+      type: mimeType,
+    });
+  }
+
+  const response = await apiRequest(
+    `/ws/products/${encodeURIComponent(productId)}/images`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    },
+    { includeStatus: true, parseJson: parseJsonPreservingInt64 },
+  );
+
+  if (response.status !== 201 || !isRecord(response.data)) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return response.data;
+}
+
 export async function setProductActive(productId, active, token) {
   if (!hasIdentifier(productId)) {
     throw new Error('O identificador do produto é inválido.');

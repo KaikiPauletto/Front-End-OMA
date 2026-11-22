@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
+  Image,
   Modal,
   Pressable,
   Platform,
@@ -12,12 +14,14 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../services/apiClient';
 import {
   createProduct,
   listCategories,
   listSubcategories,
+  uploadProductImage,
 } from '../services/productService';
 import {
   registerInitialInventoryEntry,
@@ -105,6 +109,9 @@ function getStageLabel(stage) {
   if (stage === 'creation') {
     return 'criação do produto';
   }
+  if (stage === 'image') {
+    return 'envio da imagem';
+  }
   if (stage === 'registration') {
     return 'registro do estoque';
   }
@@ -119,7 +126,7 @@ export function AddSellerProductScreen({ navigation }) {
   const [model, setModel] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [description, setDescription] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageAsset, setImageAsset] = useState(null);
   const [productType, setProductType] = useState('');
   const [initialQuantity, setInitialQuantity] = useState('');
   const [subcategoryPickerVisible, setSubcategoryPickerVisible] = useState(false);
@@ -203,6 +210,36 @@ export function AddSellerProductScreen({ navigation }) {
     setSuccessMessage(null);
   }
 
+  async function handleSelectImage() {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permissão necessária',
+          'Permita o acesso às fotos para anexar uma imagem ao produto.',
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setImageAsset(result.assets[0]);
+        setSubmitError('');
+      }
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível selecionar a foto',
+        error instanceof Error ? error.message : 'Tente novamente.',
+      );
+    }
+  }
+
   function showSuccessFeedback(productId, quantity) {
     const messageId = successMessageIdRef.current + 1;
     successMessageIdRef.current = messageId;
@@ -263,12 +300,39 @@ export function AddSellerProductScreen({ navigation }) {
         description: description.trim(),
         currency: 'BRL',
         price: parsedPrice,
-        image: imageUrl.trim() || null,
         subcategoryId,
         productType,
       }, token);
       const productId = String(createdProduct.id);
       const quantity = quantityValidation.quantity;
+
+      if (imageAsset) {
+        setWorkflowStatus({
+          status: 'pending',
+          stage: 'image',
+          productId,
+          productType,
+          quantity,
+        });
+        try {
+          await uploadProductImage(productId, imageAsset, token);
+        } catch (error) {
+          const outcome = error instanceof ApiError && error.status >= 400 && error.status < 500
+            ? 'failed'
+            : 'unknown';
+          setWorkflowStatus({
+            status: 'partial',
+            stage: 'image',
+            outcome,
+            productId,
+            productType,
+            quantity,
+          });
+          setSubmitError(getErrorMessage(error, 'o envio da imagem'));
+          return;
+        }
+      }
+
       keepSubmitLocked = true;
       setWorkflowStatus({
         status: 'pending',
@@ -334,7 +398,7 @@ export function AddSellerProductScreen({ navigation }) {
       setModel('');
       setPrice('');
       setDescription('');
-      setImageUrl('');
+      setImageAsset(null);
       setSelectedSubcategory(null);
       setProductType('');
       setInitialQuantity('');
@@ -515,18 +579,28 @@ export function AddSellerProductScreen({ navigation }) {
             : 'Informe uma quantidade inteira de 0 até o limite suportado pela API.'}
         </Text>
 
-        <Text style={styles.label}>URL da imagem (opcional)</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isFormLocked}
-          keyboardType="url"
-          onChangeText={handleFieldChange(setImageUrl)}
-          placeholder="https://..."
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={imageUrl}
-        />
+        <Text style={styles.label}>Imagem do produto (opcional)</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isFormLocked }}
+          disabled={isFormLocked}
+          onPress={handleSelectImage}
+          style={styles.imagePicker}
+        >
+          {imageAsset?.uri ? (
+            <Image
+              source={{ uri: imageAsset.uri }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+              accessibilityLabel={name || 'Imagem do produto'}
+            />
+          ) : (
+            <>
+              <Ionicons name="camera-outline" size={26} color={colors.forest} />
+              <Text style={styles.imagePickerText}>Selecionar imagem do dispositivo</Text>
+            </>
+          )}
+        </Pressable>
 
         <Text style={styles.label}>Informações do produto</Text>
         <TextInput
@@ -753,6 +827,19 @@ const styles = StyleSheet.create({
   productTypeSelectedLabel: { color: colors.forest, fontSize: 13, fontWeight: '800' },
   productTypeDescription: { color: colors.muted, fontSize: 11, marginTop: 4 },
   quantityHint: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: -10, marginBottom: 15 },
+  imagePicker: {
+    height: 180,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginBottom: 15,
+  },
+  imagePreview: { width: '100%', height: '100%' },
+  imagePickerText: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 7 },
   descriptionInput: { minHeight: 118, paddingTop: 13 },
   loadErrorContainer: { marginTop: -8, marginBottom: 12 },
   errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
