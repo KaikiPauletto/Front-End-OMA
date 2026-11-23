@@ -20,6 +20,7 @@ import {
   listInventory,
   listInventoryMovements,
 } from '../services/inventoryService';
+import { getAdminProductById } from '../services/productService';
 import {
   normalizeNonNegativeInt64,
   normalizePositiveInt64,
@@ -100,17 +101,21 @@ function FilterChip({ label, selected, onPress }) {
   );
 }
 
-function InventoryCard({ item, onPress }) {
+function InventoryCard({ item, productName, onPress }) {
+  const productId = normalizePositiveInt64(item.productId);
+  const name = productName?.trim() || `Produto ${productId}`;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Estoque do produto ${item.productId}`}
+      accessibilityLabel={`Estoque de ${name}, ID ${productId}`}
       onPress={onPress}
       style={styles.card}
     >
       <View style={styles.cardHeader}>
         <View style={styles.productIdentifier}>
-          <Text style={styles.productId}>Produto {normalizePositiveInt64(item.productId)}</Text>
+          <Text numberOfLines={2} style={styles.productName}>{name}</Text>
+          <Text style={styles.productId}>ID {productId}</Text>
           <Text style={styles.productType}>
             {item.productType === 'SINGLE_UNIT' ? 'Unitário' : 'Por quantidade'}
           </Text>
@@ -150,18 +155,22 @@ function InventoryCard({ item, onPress }) {
   );
 }
 
-function MovementCard({ item, onPress }) {
+function MovementCard({ item, productName, onPress }) {
+  const productId = normalizePositiveInt64(item.productId);
+  const name = productName?.trim() || `Produto ${productId}`;
+
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${movementTypeLabels[item.movementType]} do produto ${item.productId}`}
+      accessibilityLabel={`${movementTypeLabels[item.movementType]} de ${name}, ID ${productId}`}
       onPress={onPress}
       style={styles.card}
     >
       <View style={styles.cardHeader}>
         <View style={styles.productIdentifier}>
           <Text style={styles.productType}>{movementTypeLabels[item.movementType]}</Text>
-          <Text style={styles.productId}>Produto {normalizePositiveInt64(item.productId)}</Text>
+          <Text numberOfLines={2} style={styles.productName}>{name}</Text>
+          <Text style={styles.productId}>ID {productId}</Text>
         </View>
         <Text style={[
           styles.movementDelta,
@@ -200,6 +209,9 @@ export function InventoryScreen({ navigation }) {
   const [toInput, setToInput] = useState('');
   const [appliedMovementFilters, setAppliedMovementFilters] = useState({});
   const [items, setItems] = useState([]);
+  const [productNames, setProductNames] = useState({});
+  const [loadingProductNames, setLoadingProductNames] = useState(false);
+  const [productNameError, setProductNameError] = useState(false);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -207,12 +219,16 @@ export function InventoryScreen({ navigation }) {
   const [error, setError] = useState('');
   const [filterError, setFilterError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const productNamesCache = useRef(new Map());
   const requestVersion = useRef(0);
   const hasBeenFocused = useRef(false);
 
   useFocusEffect(useCallback(() => {
     if (hasBeenFocused.current) {
       requestVersion.current += 1;
+      productNamesCache.current.clear();
+      setProductNames({});
+      setProductNameError(false);
       setReloadKey((key) => key + 1);
     } else {
       hasBeenFocused.current = true;
@@ -293,6 +309,60 @@ export function InventoryScreen({ navigation }) {
     reloadKey,
   ]);
 
+  useEffect(() => {
+    let active = true;
+    const productIds = [...new Set(items.map((item) => String(item.productId)))];
+    const missingProductIds = productIds.filter((productId) => (
+      !productNamesCache.current.has(productId)
+    ));
+
+    if (!token || missingProductIds.length === 0) {
+      setLoadingProductNames(false);
+      setProductNameError(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setLoadingProductNames(true);
+    setProductNameError(false);
+
+    Promise.allSettled(missingProductIds.map((productId) => (
+      getAdminProductById(productId, token)
+    )))
+      .then((results) => {
+        if (!active) {
+          return;
+        }
+
+        const resolvedNames = {};
+        let failedLookup = false;
+        results.forEach((result, index) => {
+          const productId = missingProductIds[index];
+          if (result.status === 'fulfilled') {
+            productNamesCache.current.set(productId, result.value.name);
+            resolvedNames[productId] = result.value.name;
+          } else {
+            failedLookup = true;
+          }
+        });
+
+        if (Object.keys(resolvedNames).length > 0) {
+          setProductNames((current) => ({ ...current, ...resolvedNames }));
+        }
+        setProductNameError(failedLookup);
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingProductNames(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [items, token]);
+
   function chooseView(nextView) {
     if (nextView === view) {
       return;
@@ -330,6 +400,9 @@ export function InventoryScreen({ navigation }) {
 
   function retry() {
     requestVersion.current += 1;
+    productNamesCache.current.clear();
+    setProductNames({});
+    setProductNameError(false);
     setReloadKey((key) => key + 1);
   }
 
@@ -451,6 +524,14 @@ export function InventoryScreen({ navigation }) {
           <Text style={styles.refreshText}>Atualizar</Text>
         </Pressable>
       </View>
+      {loadingProductNames ? (
+        <Text style={styles.productNameStatus}>Carregando nomes dos produtos...</Text>
+      ) : null}
+      {productNameError ? (
+        <Text style={styles.productNameWarning}>
+          Alguns nomes não puderam ser carregados; exibindo os IDs correspondentes.
+        </Text>
+      ) : null}
 
       {error ? (
         <View style={styles.stateWrap}>
@@ -486,6 +567,7 @@ export function InventoryScreen({ navigation }) {
       ) : (
         <FlatList
           data={items}
+          extraData={productNames}
           keyExtractor={(item) => (
             view === 'inventory'
               ? `inventory-${normalizePositiveInt64(item.productId)}`
@@ -497,12 +579,14 @@ export function InventoryScreen({ navigation }) {
             ? (
               <InventoryCard
                 item={item}
+                productName={productNames[String(item.productId)]}
                 onPress={() => openProduct(item.productId)}
               />
             )
             : (
               <MovementCard
                 item={item}
+                productName={productNames[String(item.productId)]}
                 onPress={() => openProduct(item.productId)}
               />
             )}
@@ -588,8 +672,11 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   productIdentifier: { flex: 1 },
-  productId: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  productName: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  productId: { color: colors.muted, fontSize: 10, fontWeight: '700', marginTop: 3 },
   productType: { color: colors.muted, fontSize: 10, marginTop: 3 },
+  productNameStatus: { color: colors.muted, fontSize: 10, paddingHorizontal: 20, paddingBottom: 6 },
+  productNameWarning: { color: colors.danger, fontSize: 10, paddingHorizontal: 20, paddingBottom: 6 },
   stockBadge: { borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6 },
   lowStockBadge: { backgroundColor: colors.clayLight },
   normalStockBadge: { backgroundColor: colors.sage },
