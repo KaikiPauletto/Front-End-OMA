@@ -15,8 +15,6 @@ import { colors } from '../theme/colors';
 
 const options = [
   { icon: 'receipt-outline', label: 'Meus pedidos', destination: 'Pedidos' },
-  { icon: 'location-outline', label: 'Endereços', destination: null },
-  { icon: 'help-circle-outline', label: 'Ajuda e suporte', destination: null },
 ];
 
 export function ProfileScreen({ navigation }) {
