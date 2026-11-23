@@ -162,7 +162,7 @@ export function HomeScreen({ navigation }) {
       <AppHeader
         navigation={navigation}
         onMenuPress={() => navigation.navigate('Categorias')}
-        showMenu={user?.role === 'ADMINISTRADOR'}
+        showMenu
       />
       <ScrollView
         ref={scrollViewRef}

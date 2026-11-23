@@ -10,8 +10,11 @@ export function OrdersProvider({ children }) {
   const userId = user?.role === 'CLIENTE' ? user.id : null;
   const orders = userId ? ordersByUserId[userId] ?? [] : [];
 
-  function addOrder({ items, subtotal, address, postalCode }) {
+  function addOrder({ items, subtotal, shippingAmount, address, postalCode }) {
     if (!userId || items.length === 0) {
+      return { ok: false };
+    }
+    if (!Number.isFinite(shippingAmount) || shippingAmount < 0) {
       return { ok: false };
     }
 
@@ -21,6 +24,8 @@ export function OrdersProvider({ children }) {
       status: 'AGUARDANDO_PAGAMENTO',
       createdAt: new Date().toISOString(),
       subtotal,
+      shippingAmount,
+      totalAmount: subtotal + shippingAmount,
       items: items.map((item) => ({
         productId: item.product.id,
         productName: item.product.name,

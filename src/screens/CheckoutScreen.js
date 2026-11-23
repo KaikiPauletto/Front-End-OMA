@@ -15,8 +15,11 @@ import { ProductImage } from '../components/ProductImage';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useOrders } from '../contexts/OrdersContext';
+import { lookupBrazilianPostalCode } from '../services/cepService';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
+
+const SHIPPING_AMOUNT = 0;
 
 const addressFields = [
   { key: 'state', label: 'Estado', placeholder: 'Ex.: RS' },
@@ -53,17 +56,57 @@ export function CheckoutScreen({ navigation }) {
   const [formError, setFormError] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [shippingMessage, setShippingMessage] = useState('');
+  const [shippingError, setShippingError] = useState(false);
+  const [isLookingUpPostalCode, setIsLookingUpPostalCode] = useState(false);
+  const [postalCodeVerified, setPostalCodeVerified] = useState(false);
   const [purchaseComplete, setPurchaseComplete] = useState(false);
   const insets = useSafeAreaInsets();
+  const totalEstimate = postalCodeVerified
+    ? formatEstimate(subtotal)
+    : 'Em definição';
 
-  function calculateShipping() {
-    const digits = postalCode.replace(/\D/g, '');
-    if (digits.length !== 8) {
-      setShippingMessage('Informe um CEP válido com 8 números.');
-      return;
+  async function calculateShipping(cep = postalCode) {
+    setIsLookingUpPostalCode(true);
+    setPostalCodeVerified(false);
+    setShippingMessage('');
+    setShippingError(false);
+
+    try {
+      const location = await lookupBrazilianPostalCode(cep);
+      setAddress((currentAddress) => ({
+        ...currentAddress,
+        state: location.state,
+        city: location.city,
+      }));
+      setAddressVisible(true);
+      setPostalCodeVerified(true);
+      setShippingMessage(`CEP localizado: ${location.city} - ${location.state}. Frete grátis.`);
+    } catch (error) {
+      setShippingError(true);
+      setShippingMessage(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível consultar o CEP. Tente novamente.',
+      );
+    } finally {
+      setIsLookingUpPostalCode(false);
     }
+  }
 
-    setShippingMessage('CEP informado. O cálculo do frete estará disponível após a integração.');
+  function handlePostalCodeChange(value) {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    setPostalCode(digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits);
+    setShippingMessage('');
+    setShippingError(false);
+    setPostalCodeVerified(false);
+    setAddress((currentAddress) => ({
+      ...currentAddress,
+      state: '',
+      city: '',
+    }));
+    if (digits.length === 8) {
+      calculateShipping(digits);
+    }
   }
 
   function finishPurchase() {
@@ -74,6 +117,11 @@ export function CheckoutScreen({ navigation }) {
 
     if (!estimateComplete || subtotal === null) {
       setFormError('Não é possível registrar o pedido demonstrativo sem uma estimativa válida do backend.');
+      return;
+    }
+
+    if (!postalCodeVerified) {
+      setFormError('Consulte um CEP válido para calcular o frete antes de continuar.');
       return;
     }
 
@@ -89,7 +137,13 @@ export function CheckoutScreen({ navigation }) {
       return;
     }
 
-    const result = addOrder({ items, subtotal, address, postalCode });
+    const result = addOrder({
+      items,
+      subtotal,
+      shippingAmount: SHIPPING_AMOUNT,
+      address,
+      postalCode,
+    });
     if (!result.ok) {
       setFormError('Não foi possível registrar o pedido demonstrativo.');
       return;
@@ -108,7 +162,7 @@ export function CheckoutScreen({ navigation }) {
         <Text style={styles.successTitle}>Pedido demonstrativo registrado</Text>
         <Text style={styles.successDescription}>
           Status: AGUARDANDO_PAGAMENTO.
-          {'\n'}Registro pendente: nenhum pagamento foi processado e nenhum frete ou baixa de estoque foi confirmado.
+          {'\n'}Frete grátis aplicado. Nenhum pagamento ou baixa de estoque foi confirmado.
           {'\n'}A sacola persistida foi mantida porque este pedido é apenas demonstrativo.
         </Text>
         <Pressable
@@ -165,7 +219,7 @@ export function CheckoutScreen({ navigation }) {
       >
         <Text style={styles.sectionTitle}>Resumo do pedido</Text>
         <Text style={styles.pendingNotice}>
-          Pedido demonstrativo: pagamento e frete ainda não foram confirmados.
+          Pedido demonstrativo: pagamento pendente.
         </Text>
         {items.map((item) => (
           <View key={item.key} style={styles.productRow}>
@@ -204,12 +258,14 @@ export function CheckoutScreen({ navigation }) {
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Frete</Text>
-            <Text style={styles.shippingValue}>Calculado após integração</Text>
+            <Text style={styles.shippingValue}>
+              {postalCodeVerified ? 'Grátis' : 'Em definição'}
+            </Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>Total dos produtos</Text>
-            <Text style={styles.totalValue}>{formatEstimate(subtotal)}</Text>
+            <Text style={styles.totalLabel}>Total do pedido</Text>
+            <Text style={styles.totalValue}>{totalEstimate}</Text>
           </View>
         </View>
 
@@ -221,10 +277,9 @@ export function CheckoutScreen({ navigation }) {
             keyboardType="number-pad"
             maxLength={9}
             onChangeText={(value) => {
-              const digits = value.replace(/\D/g, '').slice(0, 8);
-              setPostalCode(digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits);
-              setShippingMessage('');
+              handlePostalCodeChange(value);
             }}
+            editable={!isLookingUpPostalCode}
             placeholder="Digite seu CEP"
             placeholderTextColor={colors.muted}
             style={styles.cepInput}
@@ -232,10 +287,14 @@ export function CheckoutScreen({ navigation }) {
           />
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{ disabled: isLookingUpPostalCode }}
+            disabled={isLookingUpPostalCode}
             onPress={calculateShipping}
             style={styles.calculateButton}
           >
-            <Text style={styles.calculateButtonText}>Calcular</Text>
+            <Text style={styles.calculateButtonText}>
+              {isLookingUpPostalCode ? 'Consultando...' : 'Calcular'}
+            </Text>
           </Pressable>
         </View>
         {shippingMessage ? (
@@ -243,7 +302,7 @@ export function CheckoutScreen({ navigation }) {
             accessibilityRole="status"
             style={[
               styles.shippingMessage,
-              postalCode.replace(/\D/g, '').length !== 8 && styles.shippingError,
+              shippingError && styles.shippingError,
             ]}
           >
             {shippingMessage}
@@ -336,8 +395,8 @@ export function CheckoutScreen({ navigation }) {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View>
-          <Text style={styles.footerLabel}>Total dos produtos</Text>
-          <Text style={styles.footerTotal}>{formatEstimate(subtotal)}</Text>
+          <Text style={styles.footerLabel}>Total do pedido</Text>
+          <Text style={styles.footerTotal}>{totalEstimate}</Text>
         </View>
         <Pressable
           accessibilityRole="button"

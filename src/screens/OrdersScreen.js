@@ -45,14 +45,20 @@ export function OrdersScreen({ navigation }) {
                 </View>
               ))}
               <View style={styles.divider} />
-              <Text style={styles.total}>Subtotal · {formatCurrency(order.subtotal)}</Text>
+              <Text style={styles.total}>Subtotal dos produtos · {formatCurrency(order.subtotal)}</Text>
+              <Text style={styles.total}>
+                Frete · {order.shippingAmount === 0 ? 'Grátis' : formatCurrency(order.shippingAmount ?? 0)}
+              </Text>
+              <Text style={styles.total}>
+                Total · {formatCurrency(order.totalAmount ?? order.subtotal)}
+              </Text>
               <Text style={styles.address}>
                 Entrega: {order.address.street}, {order.address.number} · {order.address.neighborhood},{' '}
                 {order.address.city} - {order.address.state}
                 {order.address.postalCode ? ` · CEP ${order.address.postalCode}` : ''}
               </Text>
               <Text style={styles.notice}>
-                Pagamento pendente. Frete e estoque não foram confirmados nesta demonstração.
+                Pagamento pendente. O frete exibido é estimado e o estoque não foi confirmado nesta demonstração.
               </Text>
             </View>
           ))}
