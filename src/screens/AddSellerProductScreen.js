@@ -21,6 +21,7 @@ import {
   createProduct,
   listCategories,
   listSubcategories,
+  normalizeProductImageUrl,
   uploadProductImage,
 } from '../services/productService';
 import {
@@ -126,6 +127,7 @@ export function AddSellerProductScreen({ navigation }) {
   const [model, setModel] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [imageAsset, setImageAsset] = useState(null);
   const [productType, setProductType] = useState('');
   const [initialQuantity, setInitialQuantity] = useState('');
@@ -230,6 +232,7 @@ export function AddSellerProductScreen({ navigation }) {
 
       if (!result.canceled && result.assets[0]) {
         setImageAsset(result.assets[0]);
+        setImageUrl('');
         setSubmitError('');
       }
     } catch (error) {
@@ -282,6 +285,13 @@ export function AddSellerProductScreen({ navigation }) {
       setSubmitError(quantityValidation.error);
       return;
     }
+    let normalizedImageUrl;
+    try {
+      normalizedImageUrl = normalizeProductImageUrl(imageUrl);
+    } catch (error) {
+      setSubmitError(error.message);
+      return;
+    }
     if (typeof token !== 'string' || !token.trim()) {
       setSubmitError('Sua sessão não está válida. Entre novamente como administrador.');
       return;
@@ -302,6 +312,7 @@ export function AddSellerProductScreen({ navigation }) {
         price: parsedPrice,
         subcategoryId,
         productType,
+        ...(normalizedImageUrl ? { image: normalizedImageUrl } : {}),
       }, token);
       const productId = String(createdProduct.id);
       const quantity = quantityValidation.quantity;
@@ -398,6 +409,7 @@ export function AddSellerProductScreen({ navigation }) {
       setModel('');
       setPrice('');
       setDescription('');
+      setImageUrl('');
       setImageAsset(null);
       setSelectedSubcategory(null);
       setProductType('');
@@ -579,7 +591,23 @@ export function AddSellerProductScreen({ navigation }) {
             : 'Informe uma quantidade inteira de 0 até o limite suportado pela API.'}
         </Text>
 
-        <Text style={styles.label}>Imagem do produto (opcional)</Text>
+        <Text style={styles.label}>URL da imagem (opcional)</Text>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!isFormLocked}
+          keyboardType="url"
+          onChangeText={(value) => {
+            setImageUrl(value);
+            setImageAsset(null);
+            setSubmitError('');
+          }}
+          placeholder="https://exemplo.com/imagem.jpg"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={imageUrl}
+        />
+        <Text style={styles.imageHint}>Ou anexe uma imagem do dispositivo:</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: isFormLocked }}
@@ -587,9 +615,9 @@ export function AddSellerProductScreen({ navigation }) {
           onPress={handleSelectImage}
           style={styles.imagePicker}
         >
-          {imageAsset?.uri ? (
+          {imageAsset?.uri || imageUrl.trim() ? (
             <Image
-              source={{ uri: imageAsset.uri }}
+              source={{ uri: imageAsset?.uri || imageUrl.trim() }}
               style={styles.imagePreview}
               resizeMode="cover"
               accessibilityLabel={name || 'Imagem do produto'}
@@ -840,6 +868,7 @@ const styles = StyleSheet.create({
   },
   imagePreview: { width: '100%', height: '100%' },
   imagePickerText: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 7 },
+  imageHint: { color: colors.muted, fontSize: 11, marginTop: -7, marginBottom: 8 },
   descriptionInput: { minHeight: 118, paddingTop: 13 },
   loadErrorContainer: { marginTop: -8, marginBottom: 12 },
   errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },

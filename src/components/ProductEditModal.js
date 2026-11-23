@@ -16,7 +16,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ProductImage } from './ProductImage';
 import { categories } from '../data/categories';
-import { listCategories, listSubcategories } from '../services/productService';
+import {
+  listCategories,
+  listSubcategories,
+  normalizeProductImageUrl,
+} from '../services/productService';
 import { colors } from '../theme/colors';
 
 const priceFormatter = new Intl.NumberFormat('pt-BR', {
@@ -77,6 +81,7 @@ export function ProductEditModal({
   const [model, setModel] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
   const [imageAsset, setImageAsset] = useState(null);
   const [priceInput, setPriceInput] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
@@ -99,6 +104,14 @@ export function ProductEditModal({
     setModel(product.model ?? '');
     setDescription(product.description ?? '');
     setImage(product.image ?? null);
+    const currentImageUrl = typeof product.image === 'string'
+      ? product.image
+      : product.image?.uri;
+    setImageUrl(
+      !Array.isArray(product.images) || product.images.length === 0
+        ? currentImageUrl ?? ''
+        : '',
+    );
     setImageAsset(null);
     setPriceInput(formatPrice(String(Math.round(price * 100))));
     setSelectedSubcategory(remote ? null : getSubcategorySelection(product));
@@ -189,6 +202,7 @@ export function ProductEditModal({
       if (!result.canceled && result.assets[0]) {
         setImageAsset(result.assets[0]);
         setImage({ uri: result.assets[0].uri });
+        setImageUrl('');
       }
     } catch (error) {
       Alert.alert(
@@ -200,6 +214,14 @@ export function ProductEditModal({
 
   async function handleSave() {
     if (saveLock.current) {
+      return;
+    }
+
+    let normalizedImageUrl;
+    try {
+      normalizedImageUrl = normalizeProductImageUrl(imageUrl);
+    } catch (error) {
+      setSubmitError(error.message);
       return;
     }
 
@@ -240,9 +262,15 @@ export function ProductEditModal({
       description: description.trim(),
       price: parsedPrice,
       ...(remote
-        ? { currency: currency.trim(), subcategoryId }
+        ? {
+          currency: currency.trim(),
+          subcategoryId,
+          ...(!Array.isArray(product.images) || product.images.length === 0
+            ? { image: normalizedImageUrl }
+            : {}),
+        }
         : {
-          image,
+          image: normalizedImageUrl ? { uri: normalizedImageUrl } : image,
           category: selectedSubcategory.categoryId,
           subcategory: selectedSubcategory.id,
         }),
@@ -359,7 +387,30 @@ export function ProductEditModal({
                 >
                   {remote ? (
                     <>
-                      <Text style={styles.label}>Imagem do produto (opcional)</Text>
+                      <Text style={styles.label}>URL da imagem (opcional)</Text>
+                      <TextInput
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        editable={!product.images?.length}
+                        keyboardType="url"
+                        onChangeText={(value) => {
+                          setImageUrl(value);
+                          setImageAsset(null);
+                          setImage(value.trim() ? { uri: value.trim() } : null);
+                          setSubmitError('');
+                        }}
+                        placeholder="https://exemplo.com/imagem.jpg"
+                        placeholderTextColor={colors.muted}
+                        style={styles.input}
+                        value={imageUrl}
+                      />
+                      {product.images?.length ? (
+                        <Text style={styles.imageHint}>
+                          Este produto já possui imagens anexadas; a URL legada não as substitui.
+                        </Text>
+                      ) : (
+                        <Text style={styles.imageHint}>Ou anexe uma imagem do dispositivo:</Text>
+                      )}
                       <Pressable
                         accessibilityRole="button"
                         onPress={handleSelectImage}
@@ -382,7 +433,23 @@ export function ProductEditModal({
                     </>
                   ) : (
                     <>
-                      <Text style={styles.label}>Imagem</Text>
+                      <Text style={styles.label}>URL da imagem</Text>
+                      <TextInput
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        onChangeText={(value) => {
+                          setImageUrl(value);
+                          setImageAsset(null);
+                          setImage(value.trim() ? { uri: value.trim() } : null);
+                          setSubmitError('');
+                        }}
+                        placeholder="https://exemplo.com/imagem.jpg"
+                        placeholderTextColor={colors.muted}
+                        style={styles.input}
+                        value={imageUrl}
+                      />
+                      <Text style={styles.imageHint}>Ou anexe uma imagem do dispositivo:</Text>
                       <Pressable
                         accessibilityRole="button"
                         onPress={handleSelectImage}
@@ -543,6 +610,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   imagePickerText: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 7 },
+  imageHint: { color: colors.muted, fontSize: 11, marginTop: -4, marginBottom: 8 },
   preview: { width: '100%', height: '100%' },
   input: {
     minHeight: 46,
