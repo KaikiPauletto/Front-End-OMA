@@ -5,6 +5,7 @@ import {
   ImageBackground,
   Modal,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +24,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { listCategories, listProducts, productSortOptions } from '../services/productService';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { registerScrollHomeHandler } from '../utils/homeScroll';
 
 const heroImage = { uri: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/Chimarr%C3%A3o_do_Ga%C3%BAcho.jpg/1280px-Chimarr%C3%A3o_do_Ga%C3%BAcho.jpg' };
 
@@ -36,6 +38,8 @@ const brands = [
 const PRODUCTS_PER_PAGE = 10;
 
 export function HomeScreen({ navigation }) {
+  const scrollViewRef = useRef(null);
+  const catalogSectionOffsetRef = useRef(0);
   const [search, setSearch] = useState('');
   const [productPage, setProductPage] = useState(0);
   const [categoryId, setCategoryId] = useState('');
@@ -59,6 +63,16 @@ export function HomeScreen({ navigation }) {
   for (let index = 0; index < products.length; index += 2) {
     productRows.push(products.slice(index, index + 2));
   }
+
+  useEffect(() => {
+    const scrollToTop = () => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    return registerScrollHomeHandler(scrollToTop);
+  }, []);
 
   useFocusEffect(useCallback(() => {
     if (hasBeenFocused.current) {
@@ -135,6 +149,12 @@ export function HomeScreen({ navigation }) {
     }
 
     setProductPage(nextPage);
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({
+        y: catalogSectionOffsetRef.current,
+        animated: true,
+      });
+    });
   }
 
   return (
@@ -145,6 +165,7 @@ export function HomeScreen({ navigation }) {
         showMenu={user?.role === 'ADMINISTRADOR'}
       />
       <ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -212,7 +233,12 @@ export function HomeScreen({ navigation }) {
 
         <EditorialSection onLearnMore={() => navigation.navigate('AboutOMA')} />
 
-        <View style={styles.catalogSection}>
+        <View
+          onLayout={(event) => {
+            catalogSectionOffsetRef.current = event.nativeEvent.layout.y;
+          }}
+          style={styles.catalogSection}
+        >
           <SectionTitle title="Todos os produtos" />
           <View style={styles.catalogActions}>
             <Pressable

@@ -52,6 +52,8 @@ export function ProductsScreen({ navigation, route }) {
   const hasBeenFocused = useRef(false);
   const queryVersion = useRef(0);
   const loadMoreLock = useRef(false);
+  const productListRef = useRef(null);
+  const pendingPageStartRef = useRef(null);
 
   useEffect(() => {
     setSearch(route.params?.searchQuery ?? '');
@@ -178,6 +180,22 @@ export function ProductsScreen({ navigation, route }) {
     };
   }, [submittedSearch, categoryId, subcategoryId, minPrice, maxPrice, selectedSort.sort, reloadKey]);
 
+  useEffect(() => {
+    if (pendingPageStartRef.current === null) {
+      return;
+    }
+
+    const index = pendingPageStartRef.current;
+    pendingPageStartRef.current = null;
+    requestAnimationFrame(() => {
+      productListRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0,
+      });
+    });
+  }, [products]);
+
   const title = search.trim()
     ? 'Resultados da busca'
     : selectedSubcategory?.name || selectedCategory?.name || 'Produtos';
@@ -210,6 +228,7 @@ export function ProductsScreen({ navigation, route }) {
       });
 
       if (queryVersion.current === version) {
+        pendingPageStartRef.current = Math.floor(products.length / 2);
         setProducts((currentProducts) => [...currentProducts, ...result.products]);
         setPage(result.page);
         setTotalPages(result.totalPages);
@@ -308,6 +327,7 @@ export function ProductsScreen({ navigation, route }) {
       </View>
 
       <FlatList
+        ref={productListRef}
         data={products}
         numColumns={2}
         keyExtractor={(item) => item.id}
@@ -316,6 +336,12 @@ export function ProductsScreen({ navigation, route }) {
         showsVerticalScrollIndicator={false}
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          productListRef.current?.scrollToOffset({
+            offset: index * averageItemLength,
+            animated: true,
+          });
+        }}
         ListEmptyComponent={loading ? (
           <View style={styles.emptyState}>
             <ActivityIndicator color={colors.forest} />

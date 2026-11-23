@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLogo } from './BrandLogo';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { scrollHomeToTop } from '../utils/homeScroll';
 
 export function AppHeader({
   navigation,
@@ -34,7 +35,17 @@ export function AppHeader({
             />
           </Pressable>
         ) : (
-          <BrandLogo variant="catalog" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ir para o início"
+            onPress={() => {
+              scrollHomeToTop();
+              navigation?.navigate('MainTabs', { screen: 'Home' });
+            }}
+            hitSlop={10}
+          >
+            <BrandLogo variant="catalog" />
+          </Pressable>
         )}
 
         {title ? <Text numberOfLines={1} style={[styles.title, tone === 'forest' && styles.forestText]}>{title}</Text> : null}
