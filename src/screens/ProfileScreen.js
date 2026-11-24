@@ -93,6 +93,16 @@ export function ProfileScreen({ navigation }) {
           <View style={styles.menu}>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Gerenciar categorias e subcategorias"
+              onPress={() => navigation.navigate('Categorias')}
+              style={styles.option}
+            >
+              <Ionicons name="grid-outline" size={20} color={colors.forest} />
+              <Text style={styles.optionText}>Gerenciar categorias</Text>
+              <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Gerenciar estoque"
               onPress={() => navigation.navigate('Inventory')}
               style={styles.option}

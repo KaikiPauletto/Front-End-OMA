@@ -277,16 +277,32 @@ export async function setProductActive(productId, active, token) {
 }
 
 function mapNamedResource(resource) {
+  const id = isRecord(resource) ? normalizePositiveInt64(resource.id) : null;
   if (
     !isRecord(resource) ||
-    !hasIdentifier(resource.id) ||
+    !id ||
     typeof resource.name !== 'string' ||
     !resource.name.trim()
   ) {
     throw new InvalidCatalogResponseError();
   }
 
-  return { ...resource, id: String(resource.id) };
+  if (resource.active !== undefined && typeof resource.active !== 'boolean') {
+    throw new InvalidCatalogResponseError();
+  }
+
+  const categoryId = resource.categoryId === undefined
+    ? undefined
+    : normalizePositiveInt64(resource.categoryId);
+  if (resource.categoryId !== undefined && !categoryId) {
+    throw new InvalidCatalogResponseError();
+  }
+
+  return {
+    ...resource,
+    id,
+    ...(categoryId ? { categoryId } : {}),
+  };
 }
 
 function queryString(params) {
@@ -493,18 +509,166 @@ export async function listAdminConfirmedSales({ page = 0, size = 20, token }) {
   };
 }
 
-export async function listCategories() {
-  const response = await apiRequest('/categories');
+function categoryHeaders(token) {
+  if (token === undefined) {
+    return {};
+  }
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+  return { Authorization: `Bearer ${token}` };
+}
+
+function normalizeResourceName(name) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 180) {
+    throw new Error('O nome deve conter entre 1 e 180 caracteres.');
+  }
+  return name.trim();
+}
+
+function normalizeResourceId(id, field = 'identificador') {
+  const normalizedId = normalizePositiveInt64(id);
+  if (!normalizedId) {
+    throw new Error(`O ${field} informado é inválido.`);
+  }
+  return normalizedId;
+}
+
+async function writeNamedResource(path, method, body, token, expectedStatus, expectedId) {
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('Sua sessão não está válida. Entre novamente como administrador.');
+  }
+  const requestBody = body.categoryId
+    ? `{"categoryId":${body.categoryId},"name":${JSON.stringify(body.name)}}`
+    : JSON.stringify(body);
+  const response = await apiRequest(
+    path,
+    {
+      method,
+      headers: {
+        ...categoryHeaders(token),
+        'Content-Type': 'application/json',
+      },
+      body: requestBody,
+    },
+    { includeStatus: true, parseJson: parseJsonPreservingInt64 },
+  );
+  const resource = mapNamedResource(response.data);
+  if (
+    response.status !== expectedStatus ||
+    (expectedId && resource.id !== expectedId) ||
+    typeof resource.active !== 'boolean'
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+  return resource;
+}
+
+export async function listCategories(token) {
+  const response = await apiRequest(
+    '/categories',
+    { headers: categoryHeaders(token) },
+    { parseJson: parseJsonPreservingInt64 },
+  );
   if (!Array.isArray(response)) {
     throw new InvalidCatalogResponseError();
   }
   return response.map(mapNamedResource);
 }
 
-export async function listSubcategories(categoryId) {
-  const response = await apiRequest(`/categories/${encodeURIComponent(categoryId)}/subcategories`);
+export async function listSubcategories(categoryId, token) {
+  const id = normalizeResourceId(categoryId, 'identificador da categoria');
+  const response = await apiRequest(
+    `/categories/${encodeURIComponent(id)}/subcategories`,
+    { headers: categoryHeaders(token) },
+    { parseJson: parseJsonPreservingInt64 },
+  );
   if (!Array.isArray(response)) {
     throw new InvalidCatalogResponseError();
   }
   return response.map(mapNamedResource);
+}
+
+export async function createCategory(name, token) {
+  return writeNamedResource(
+    '/ws/categories',
+    'POST',
+    { name: normalizeResourceName(name) },
+    token,
+    201,
+  );
+}
+
+export async function updateCategory(categoryId, name, token) {
+  const id = normalizeResourceId(categoryId, 'identificador da categoria');
+  return writeNamedResource(
+    `/ws/categories/${encodeURIComponent(id)}`,
+    'PUT',
+    { name: normalizeResourceName(name) },
+    token,
+    200,
+    id,
+  );
+}
+
+export async function setCategoryActive(categoryId, active, token) {
+  const id = normalizeResourceId(categoryId, 'identificador da categoria');
+  if (typeof active !== 'boolean') {
+    throw new Error('O status da categoria deve ser ativo ou inativo.');
+  }
+  const category = await writeNamedResource(
+    `/ws/categories/${encodeURIComponent(id)}/status`,
+    'PATCH',
+    { active },
+    token,
+    200,
+    id,
+  );
+  if (category.active !== active) {
+    throw new InvalidCatalogResponseError();
+  }
+  return category;
+}
+
+export async function createSubcategory(categoryId, name, token) {
+  const id = normalizeResourceId(categoryId, 'identificador da categoria');
+  return writeNamedResource(
+    '/ws/subcategories',
+    'POST',
+    { categoryId: id, name: normalizeResourceName(name) },
+    token,
+    201,
+  );
+}
+
+export async function updateSubcategory(subcategoryId, categoryId, name, token) {
+  const id = normalizeResourceId(subcategoryId, 'identificador da subcategoria');
+  const parentId = normalizeResourceId(categoryId, 'identificador da categoria');
+  return writeNamedResource(
+    `/ws/subcategories/${encodeURIComponent(id)}`,
+    'PUT',
+    { categoryId: parentId, name: normalizeResourceName(name) },
+    token,
+    200,
+    id,
+  );
+}
+
+export async function setSubcategoryActive(subcategoryId, active, token) {
+  const id = normalizeResourceId(subcategoryId, 'identificador da subcategoria');
+  if (typeof active !== 'boolean') {
+    throw new Error('O status da subcategoria deve ser ativo ou inativo.');
+  }
+  const subcategory = await writeNamedResource(
+    `/ws/subcategories/${encodeURIComponent(id)}/status`,
+    'PATCH',
+    { active },
+    token,
+    200,
+    id,
+  );
+  if (subcategory.active !== active) {
+    throw new InvalidCatalogResponseError();
+  }
+  return subcategory;
 }

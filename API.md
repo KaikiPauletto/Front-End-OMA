@@ -677,9 +677,9 @@ Os IDs são gerados pelo banco e devem ser obtidos em tempo de execução: consu
 
 **`GET /categories`**
 
-Lista categorias ativas, ordenadas por nome.
+Sem token ou com token de cliente, lista categorias ativas, ordenadas por nome. Com token de administrador, lista categorias ativas e inativas, ordenadas por nome.
 
-**Autenticação:** Não.
+**Autenticação:** Opcional. Envie `Authorization: Bearer <jwt>` para consultar com o escopo do usuário autenticado.
 
 **Headers:** `Accept: application/json` recomendado.
 
@@ -710,9 +710,9 @@ Lista categorias ativas, ordenadas por nome.
 
 **`GET /categories/{id}/subcategories`**
 
-Lista subcategorias ativas, ordenadas por nome. Se a categoria não existir ou estiver inativa, retorna `404`.
+Sem token ou com token de cliente, lista subcategorias ativas, ordenadas por nome. Com token de administrador, lista subcategorias ativas e inativas. Se a categoria não existir ou estiver inativa, o acesso público retorna `404`.
 
-**Autenticação:** Não.
+**Autenticação:** Opcional. Envie `Authorization: Bearer <jwt>` para consultar com o escopo do usuário autenticado.
 
 **Headers:** `Accept: application/json` recomendado.
 
