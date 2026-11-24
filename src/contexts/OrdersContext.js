@@ -1,52 +1,115 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { listOrders } from '../services/ordersService.js';
 import { useAuth } from './AuthContext';
 
 const OrdersContext = createContext(null);
-let orderSequence = 0;
+
+function getOrdersErrorMessage(error) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'Não foi possível carregar seus pedidos. Tente novamente.';
+}
 
 export function OrdersProvider({ children }) {
-  const { user } = useAuth();
-  const [ordersByUserId, setOrdersByUserId] = useState({});
-  const userId = user?.role === 'CLIENTE' ? user.id : null;
-  const orders = userId ? ordersByUserId[userId] ?? [] : [];
+  const { user, token } = useAuth();
+  const isCustomer = user?.role === 'CLIENTE' && typeof token === 'string' && token.trim();
+  const sessionKey = isCustomer ? token : null;
+  const [state, setState] = useState({
+    sessionKey: null,
+    status: 'idle',
+    orders: [],
+    error: '',
+  });
+  const stateRef = useRef(state);
+  const generationRef = useRef(0);
+  const activeSessionRef = useRef(sessionKey);
+  stateRef.current = state;
+  activeSessionRef.current = sessionKey;
 
-  function addOrder({ items, subtotal, shippingAmount, address, postalCode }) {
-    if (!userId || items.length === 0) {
-      return { ok: false };
-    }
-    if (!Number.isFinite(shippingAmount) || shippingAmount < 0) {
-      return { ok: false };
+  const refreshOrders = useCallback(async () => {
+    if (!sessionKey || activeSessionRef.current !== sessionKey) {
+      return { ok: false, message: 'Entre como cliente para consultar seus pedidos.' };
     }
 
-    const order = {
-      id: `demo-order-${Date.now()}-${++orderSequence}`,
-      customerId: userId,
-      status: 'AGUARDANDO_PAGAMENTO',
-      createdAt: new Date().toISOString(),
-      subtotal,
-      shippingAmount,
-      totalAmount: subtotal + shippingAmount,
-      items: items.map((item) => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        unitPrice: item.unitPrice,
-        quantity: item.quantity,
-        variantId: item.variant?.id ?? null,
-        variantName: item.variant?.name ?? null,
-        lineTotal: item.estimatedSubtotal,
-      })),
-      address: { ...address, postalCode },
+    const generation = ++generationRef.current;
+    const currentState = stateRef.current;
+    const currentOrders = currentState.sessionKey === sessionKey
+      ? currentState.orders
+      : [];
+    setState({
+      sessionKey,
+      status: currentOrders.length > 0 ? 'refreshing' : 'loading',
+      orders: currentOrders,
+      error: '',
+    });
+
+    try {
+      const orders = await listOrders(token);
+      if (
+        generationRef.current !== generation ||
+        activeSessionRef.current !== sessionKey
+      ) {
+        return { ok: false, message: 'A sessão mudou durante a consulta dos pedidos.' };
+      }
+      setState({
+        sessionKey,
+        status: 'ready',
+        orders,
+        error: '',
+      });
+      return { ok: true };
+    } catch (error) {
+      const message = getOrdersErrorMessage(error);
+      if (
+        generationRef.current === generation &&
+        activeSessionRef.current === sessionKey
+      ) {
+        setState({
+          sessionKey,
+          status: 'error',
+          orders: currentOrders,
+          error: message,
+        });
+      }
+      return { ok: false, message };
+    }
+  }, [sessionKey, token]);
+
+  useEffect(() => {
+    if (!sessionKey) {
+      generationRef.current += 1;
+      setState({
+        sessionKey: null,
+        status: 'idle',
+        orders: [],
+        error: '',
+      });
+      return;
+    }
+    setState({
+      sessionKey,
+      status: 'loading',
+      orders: [],
+      error: '',
+    });
+    refreshOrders();
+  }, [refreshOrders, sessionKey]);
+
+  const currentState = state.sessionKey === sessionKey
+    ? state
+    : {
+      sessionKey,
+      status: isCustomer ? 'loading' : 'idle',
+      orders: [],
+      error: '',
     };
-
-    setOrdersByUserId((currentOrders) => ({
-      ...currentOrders,
-      [userId]: [order, ...(currentOrders[userId] ?? [])],
-    }));
-
-    return { ok: true };
-  }
-
-  const value = useMemo(() => ({ orders, addOrder }), [orders, userId]);
+  const value = useMemo(() => ({
+    orders: currentState.orders,
+    status: currentState.status,
+    error: currentState.error,
+    refreshOrders,
+  }), [currentState, refreshOrders]);
 
   return <OrdersContext.Provider value={value}>{children}</OrdersContext.Provider>;
 }

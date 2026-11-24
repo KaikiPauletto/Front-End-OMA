@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
+  Linking,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,11 +17,15 @@ import { ProductImage } from '../components/ProductImage';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useOrders } from '../contexts/OrdersContext';
+import { ApiError } from '../services/apiClient.js';
 import { lookupBrazilianPostalCode } from '../services/cepService';
+import {
+  createCheckoutSession,
+  createOrder,
+  getPaymentStatus,
+} from '../services/ordersService.js';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
-
-const SHIPPING_AMOUNT = 0;
 
 const addressFields = [
   { key: 'state', label: 'Estado', placeholder: 'Ex.: RS' },
@@ -29,11 +35,6 @@ const addressFields = [
   { key: 'neighborhood', label: 'Bairro', placeholder: 'Seu bairro' },
 ];
 
-const paymentOptions = [
-  { id: 'pix', label: 'Pix', icon: 'qr-code-outline' },
-  { id: 'boleto', label: 'Boleto', icon: 'barcode-outline' },
-];
-
 function formatEstimate(value) {
   return typeof value === 'number' && Number.isFinite(value)
     ? formatCurrency(value)
@@ -41,9 +42,9 @@ function formatEstimate(value) {
 }
 
 export function CheckoutScreen({ navigation }) {
-  const { user } = useAuth();
-  const { items, subtotal, estimateComplete } = useCart();
-  const { addOrder } = useOrders();
+  const { user, token } = useAuth();
+  const { items, subtotal, estimateComplete, clearItems } = useCart();
+  const { refreshOrders } = useOrders();
   const [addressVisible, setAddressVisible] = useState(false);
   const [address, setAddress] = useState({
     state: '',
@@ -52,18 +53,83 @@ export function CheckoutScreen({ navigation }) {
     number: '',
     neighborhood: '',
   });
-  const [paymentMethod, setPaymentMethod] = useState('pix');
   const [formError, setFormError] = useState('');
+  const [paymentError, setPaymentError] = useState('');
+  const [cartClearWarning, setCartClearWarning] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [shippingMessage, setShippingMessage] = useState('');
   const [shippingError, setShippingError] = useState(false);
   const [isLookingUpPostalCode, setIsLookingUpPostalCode] = useState(false);
   const [postalCodeVerified, setPostalCodeVerified] = useState(false);
-  const [purchaseComplete, setPurchaseComplete] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLaunchingPayment, setIsLaunchingPayment] = useState(false);
+  const idempotencyAttemptRef = useRef(null);
+  const paymentCheckRef = useRef(false);
   const insets = useSafeAreaInsets();
-  const totalEstimate = postalCodeVerified
-    ? formatEstimate(subtotal)
-    : 'Em definição';
+  const subtotalEstimate = estimateComplete ? formatEstimate(subtotal) : 'Em definição';
+
+  async function launchPayment(order) {
+    if (!token || isLaunchingPayment) {
+      return;
+    }
+
+    setPaymentError('');
+    setIsLaunchingPayment(true);
+    try {
+      const session = await createCheckoutSession(order.id, token);
+      await Linking.openURL(session.checkoutUrl);
+      setPaymentStatus('PENDING');
+    } catch (error) {
+      setPaymentError(error instanceof Error
+        ? error.message
+        : 'Não foi possível abrir o checkout do Stripe.');
+    } finally {
+      setIsLaunchingPayment(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!createdOrder || !token) {
+      return undefined;
+    }
+
+    let active = true;
+    const subscription = AppState.addEventListener('change', async (nextState) => {
+      if (nextState !== 'active' || paymentCheckRef.current) {
+        return;
+      }
+
+      paymentCheckRef.current = true;
+      try {
+        for (let attempt = 0; attempt < 15 && active; attempt += 1) {
+          const payment = await getPaymentStatus(createdOrder.id, token);
+          if (active) {
+            setPaymentStatus(payment?.status ?? '');
+            setPaymentError('');
+          }
+          if (!payment || !['CREATED', 'PENDING'].includes(payment.status)) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      } catch (error) {
+        if (active) {
+          setPaymentError(error instanceof Error
+            ? error.message
+            : 'Não foi possível consultar o pagamento.');
+        }
+      } finally {
+        paymentCheckRef.current = false;
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [createdOrder, token]);
 
   async function calculateShipping(cep = postalCode) {
     setIsLookingUpPostalCode(true);
@@ -80,7 +146,9 @@ export function CheckoutScreen({ navigation }) {
       }));
       setAddressVisible(true);
       setPostalCodeVerified(true);
-      setShippingMessage(`CEP localizado: ${location.city} - ${location.state}. Frete grátis.`);
+      setShippingMessage(
+        `CEP localizado: ${location.city} - ${location.state}. O frete será calculado pelo servidor.`,
+      );
     } catch (error) {
       setShippingError(true);
       setShippingMessage(
@@ -109,14 +177,18 @@ export function CheckoutScreen({ navigation }) {
     }
   }
 
-  function finishPurchase() {
+  async function finishPurchase() {
     if (!user || user.role !== 'CLIENTE') {
       setFormError('Somente clientes podem finalizar um pedido.');
       return;
     }
+    if (!token) {
+      setFormError('Sua sessão expirou. Entre novamente para finalizar o pedido.');
+      return;
+    }
 
     if (!estimateComplete || subtotal === null) {
-      setFormError('Não é possível registrar o pedido demonstrativo sem uma estimativa válida do backend.');
+      setFormError('Não é possível finalizar sem uma estimativa válida dos produtos.');
       return;
     }
 
@@ -137,40 +209,101 @@ export function CheckoutScreen({ navigation }) {
       return;
     }
 
-    const result = addOrder({
-      items,
-      subtotal,
-      shippingAmount: SHIPPING_AMOUNT,
-      address,
-      postalCode,
-    });
-    if (!result.ok) {
-      setFormError('Não foi possível registrar o pedido demonstrativo.');
-      return;
+    setFormError('');
+    setPaymentError('');
+    setIsSubmitting(true);
+
+    const payload = {
+      items: items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      })),
+      shippingAddress: {
+        zipCode: postalCode.replace(/\D/g, ''),
+        street: address.street.trim(),
+        number: address.number.trim(),
+        neighborhood: address.neighborhood.trim(),
+        city: address.city.trim(),
+        state: address.state.trim().toUpperCase(),
+      },
+    };
+    const payloadFingerprint = JSON.stringify(payload);
+    if (idempotencyAttemptRef.current?.payload !== payloadFingerprint) {
+      idempotencyAttemptRef.current = {
+        payload: payloadFingerprint,
+        key: `oma-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      };
     }
 
-    setFormError('');
-    setPurchaseComplete(true);
+    try {
+      const order = await createOrder(
+        payload,
+        token,
+        idempotencyAttemptRef.current.key,
+      );
+      idempotencyAttemptRef.current = null;
+      setCreatedOrder(order);
+      const clearResult = await clearItems();
+      if (!clearResult.ok) {
+        setCartClearWarning(
+          'O pedido foi criado, mas não foi possível limpar a sacola. Atualize-a antes de fazer outro pedido.',
+        );
+      }
+      await refreshOrders();
+      await launchPayment(order);
+    } catch (error) {
+      const message = error instanceof ApiError && error.status === 409
+        ? 'O estoque mudou antes da confirmação. Atualize a sacola e tente novamente.'
+        : error instanceof ApiError && error.status === 422
+          ? error.message || 'Um produto não está disponível para venda.'
+          : error instanceof Error
+            ? error.message
+            : 'Não foi possível criar o pedido. Tente novamente.';
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  if (purchaseComplete) {
+  if (createdOrder) {
     return (
       <View style={styles.successScreen}>
         <View style={styles.successIcon}>
           <Ionicons name="checkmark" size={38} color={colors.forest} />
         </View>
-        <Text style={styles.successTitle}>Pedido demonstrativo registrado</Text>
+        <Text style={styles.successTitle}>Pedido registrado</Text>
         <Text style={styles.successDescription}>
-          Status: AGUARDANDO_PAGAMENTO.
-          {'\n'}Frete grátis aplicado. Nenhum pagamento ou baixa de estoque foi confirmado.
-          {'\n'}A sacola persistida foi mantida porque este pedido é apenas demonstrativo.
+          Pedido #{createdOrder.id} · {createdOrder.status}
+          {'\n'}Total confirmado pelo servidor: {formatCurrency(createdOrder.totalAmount)}
+          {'\n'}{paymentStatus
+            ? `Pagamento: ${paymentStatus}`
+            : 'Aguardando confirmação do pagamento.'}
         </Text>
+        {paymentError ? (
+          <Text accessibilityRole="alert" style={styles.successError}>{paymentError}</Text>
+        ) : null}
+        {cartClearWarning ? (
+          <Text accessibilityRole="alert" style={styles.successError}>{cartClearWarning}</Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
-          onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
+          disabled={isLaunchingPayment}
+          onPress={() => launchPayment(createdOrder)}
           style={styles.successButton}
         >
-          <Text style={styles.successButtonText}>Voltar para a loja</Text>
+          <Text style={styles.successButtonText}>
+            {isLaunchingPayment ? 'Abrindo pagamento...' : 'Abrir pagamento no Stripe'}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => navigation.navigate('MainTabs', {
+            screen: 'Conta',
+            params: { screen: 'Pedidos' },
+          })}
+          style={styles.ordersButton}
+        >
+          <Text style={styles.ordersButtonText}>Ver meus pedidos</Text>
         </Pressable>
       </View>
     );
@@ -218,9 +351,6 @@ export function CheckoutScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.sectionTitle}>Resumo do pedido</Text>
-        <Text style={styles.pendingNotice}>
-          Pedido demonstrativo: pagamento pendente.
-        </Text>
         {items.map((item) => (
           <View key={item.key} style={styles.productRow}>
             <View style={[styles.productArtwork, { backgroundColor: item.product.backdrop || colors.surfaceMuted }]}>
@@ -253,19 +383,17 @@ export function CheckoutScreen({ navigation }) {
 
         <View style={styles.priceSummary}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal dos produtos</Text>
-            <Text style={styles.summaryValue}>{formatEstimate(subtotal)}</Text>
+            <Text style={styles.summaryLabel}>Subtotal estimado</Text>
+            <Text style={styles.summaryValue}>{subtotalEstimate}</Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Frete</Text>
-            <Text style={styles.shippingValue}>
-              {postalCodeVerified ? 'Grátis' : 'Em definição'}
-            </Text>
+            <Text style={styles.shippingValue}>Calculado pelo servidor</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>Total do pedido</Text>
-            <Text style={styles.totalValue}>{totalEstimate}</Text>
+            <Text style={styles.totalLabel}>Total final</Text>
+            <Text style={styles.totalValue}>Após validar o pedido</Text>
           </View>
         </View>
 
@@ -355,55 +483,36 @@ export function CheckoutScreen({ navigation }) {
         ) : null}
         {formError ? <Text accessibilityRole="alert" style={styles.formError}>{formError}</Text> : null}
 
-        <Text style={[styles.sectionTitle, styles.paymentTitle]}>Forma de pagamento</Text>
-        <View style={styles.paymentOptions}>
-          {paymentOptions.map((option) => {
-            const isSelected = paymentMethod === option.id;
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: isSelected }}
-                onPress={() => setPaymentMethod(option.id)}
-                style={[styles.paymentOption, isSelected && styles.paymentOptionSelected]}
-              >
-                <Ionicons
-                  name={option.icon}
-                  size={21}
-                  color={isSelected ? colors.forest : colors.muted}
-                />
-                <Text style={[styles.paymentLabel, isSelected && styles.paymentLabelSelected]}>
-                  {option.label}
-                </Text>
-                <Ionicons
-                  name={isSelected ? 'radio-button-on' : 'radio-button-off'}
-                  size={19}
-                  color={isSelected ? colors.forest : colors.muted}
-                />
-              </Pressable>
-            );
-          })}
+        <Text style={[styles.sectionTitle, styles.paymentTitle]}>Pagamento</Text>
+        <View style={styles.paymentInfo}>
+          <Ionicons name="card-outline" size={22} color={colors.forest} />
+          <View style={styles.paymentTextContainer}>
+            <Text style={styles.paymentLabel}>Cartão pelo Stripe Checkout</Text>
+            <Text style={styles.paymentDescription}>
+              O pagamento será feito em uma página segura do Stripe. Os dados do cartão não passam pelo app.
+            </Text>
+          </View>
         </View>
 
         <Text style={styles.disclaimer}>
-          Checkout demonstrativo: valores e disponibilidade ainda serão confirmados pelo sistema.
-        </Text>
-        <Text style={styles.disclaimer}>
-          Ao finalizar, será criado um pedido pendente. Nenhum pagamento ou baixa de estoque será realizado.
+          O servidor confirma preço, frete e disponibilidade antes de criar o pedido.
         </Text>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
         <View>
-          <Text style={styles.footerLabel}>Total do pedido</Text>
-          <Text style={styles.footerTotal}>{totalEstimate}</Text>
+          <Text style={styles.footerLabel}>Subtotal estimado</Text>
+          <Text style={styles.footerTotal}>{subtotalEstimate}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
+          disabled={isSubmitting || isLaunchingPayment}
           onPress={finishPurchase}
           style={styles.finishButton}
         >
-          <Text style={styles.finishButtonText}>Finalizar compra</Text>
+          <Text style={styles.finishButtonText}>
+            {isSubmitting ? 'Criando pedido...' : 'Finalizar compra'}
+          </Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -433,7 +542,6 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 42 },
   content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24 },
   sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800', marginBottom: 12 },
-  pendingNotice: { color: colors.clay, fontSize: 11, lineHeight: 16, marginBottom: 14 },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -542,23 +650,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   paymentTitle: { marginTop: 24 },
-  paymentOptions: { flexDirection: 'row', gap: 11 },
-  paymentOption: {
-    flex: 1,
-    minHeight: 58,
+  paymentInfo: {
+    minHeight: 68,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 14,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  paymentOptionSelected: { borderColor: colors.forest, backgroundColor: colors.sage },
-  paymentLabel: { color: colors.mutedStrong, fontSize: 12, fontWeight: '700' },
-  paymentLabelSelected: { color: colors.forest },
+  paymentTextContainer: { flex: 1 },
+  paymentLabel: { color: colors.forest, fontSize: 12, fontWeight: '700' },
+  paymentDescription: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 4 },
   disclaimer: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 18 },
   footer: {
     flexDirection: 'row',
@@ -610,6 +715,7 @@ const styles = StyleSheet.create({
   },
   successTitle: { color: colors.ink, fontSize: 22, fontWeight: '800', textAlign: 'center' },
   successDescription: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 11 },
+  successError: { color: colors.danger, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12 },
   successButton: {
     minHeight: 50,
     alignItems: 'center',
@@ -619,5 +725,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.forest,
     marginTop: 24,
   },
+  ordersButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    marginTop: 10,
+  },
+  ordersButtonText: { color: colors.forest, fontSize: 12, fontWeight: '800' },
   successButtonText: { color: colors.white, fontSize: 13, fontWeight: '800' },
 });

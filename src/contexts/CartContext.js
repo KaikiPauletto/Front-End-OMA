@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { ApiError } from '../services/apiClient.js';
 import {
   addCartItem,
+  clearCartItems,
   getCart,
   InvalidCartResponseError,
   removeCartItem,
@@ -85,7 +86,6 @@ function needsReconciliation(error) {
   }
   return error.status === 404 ||
     error.status === 408 ||
-    error.status === 409 ||
     error.status === 429 ||
     error.status >= 500;
 }
@@ -358,11 +358,50 @@ export function CartProvider({ children }) {
       });
       return { ok: true };
     } catch (error) {
-      if (
+      const requestIsCurrent = () => (
         sessionGenerationRef.current === sessionGeneration &&
         requestGenerationRef.current === requestGeneration &&
         activeSessionRef.current === sessionKey
-      ) {
+      );
+      let reconciliationFailed = false;
+
+      if (requestIsCurrent() && error instanceof ApiError && error.status === 409) {
+        try {
+          const cart = await getCart(token);
+          if (requestIsCurrent()) {
+            setState({
+              sessionKey,
+              status: 'ready',
+              cart,
+              error: '',
+              reconciliationRequired: false,
+              pendingOperation: null,
+              pendingItemKey: null,
+            });
+          }
+        } catch (reconciliationError) {
+          reconciliationFailed = true;
+          if (requestIsCurrent()) {
+            setState({
+              ...currentState,
+              status: 'error',
+              error: getCartErrorMessage(reconciliationError),
+              reconciliationRequired: true,
+              pendingOperation: null,
+              pendingItemKey: null,
+            });
+          }
+        }
+      } else if (requestIsCurrent() && error instanceof ApiError && error.status === 400) {
+        setState({
+          ...currentState,
+          status: 'ready',
+          error: '',
+          reconciliationRequired: false,
+          pendingOperation: null,
+          pendingItemKey: null,
+        });
+      } else if (requestIsCurrent()) {
         setState({
           ...currentState,
           status: 'error',
@@ -375,7 +414,7 @@ export function CartProvider({ children }) {
       return {
         ok: false,
         message: getCartErrorMessage(error),
-        uncertain: needsReconciliation(error),
+        uncertain: reconciliationFailed || needsReconciliation(error),
       };
     } finally {
       if (sessionGenerationRef.current === sessionGeneration) {
@@ -502,6 +541,18 @@ export function CartProvider({ children }) {
     );
   }, [runMutation, token]);
 
+  const clearItems = useCallback(async () => runMutation(
+    'clear',
+    null,
+    () => clearCartItems(token),
+    (currentCart) => ({
+      ...currentCart,
+      items: [],
+      estimatedSubtotal: null,
+      estimateComplete: false,
+    }),
+  ), [runMutation, token]);
+
   const currentState = state.sessionKey === sessionKey && sessionKey
     ? state
     : {
@@ -534,9 +585,11 @@ export function CartProvider({ children }) {
     addItem,
     updateQuantity,
     removeItem,
+    clearItems,
   }), [
     addItem,
     currentState,
+    clearItems,
     items,
     refreshCart,
     removeItem,

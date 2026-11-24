@@ -9,6 +9,23 @@ import { ProductCatalogProvider } from './src/contexts/ProductCatalogContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { colors } from './src/theme/colors';
 
+const linking = {
+  prefixes: ['oma://'],
+  config: {
+    screens: {
+      MainTabs: {
+        screens: {
+          Conta: {
+            screens: {
+              Pedidos: 'payment/:result',
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -18,6 +35,7 @@ export default function App() {
             <SellerProductsProvider>
               <ProductCatalogProvider>
                 <NavigationContainer
+                  linking={linking}
                   theme={{
                     ...DefaultTheme,
                     colors: {

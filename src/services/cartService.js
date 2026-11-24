@@ -216,3 +216,19 @@ export async function removeCartItem(productId, token) {
     throw new InvalidCartResponseError();
   }
 }
+
+export async function clearCartItems(token) {
+  validateCredentials(token);
+  const response = await apiRequest(
+    '/ws/cart/items',
+    {
+      method: 'DELETE',
+      headers: getAuthHeaders(token),
+    },
+    { includeStatus: true },
+  );
+
+  if (!isRecord(response) || response.status !== 204 || response.data !== null) {
+    throw new InvalidCartResponseError();
+  }
+}

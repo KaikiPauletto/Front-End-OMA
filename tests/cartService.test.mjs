@@ -3,6 +3,7 @@ import test from 'node:test';
 import { ApiError } from '../src/services/apiClient.js';
 import {
   addCartItem,
+  clearCartItems,
   getCart,
   InvalidCartResponseError,
   removeCartItem,
@@ -91,6 +92,17 @@ test('PATCH and DELETE use the public item routes and DELETE requires 204', asyn
       return new Response(cartJson, {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
+      });
+
+      test('clearing the cart uses the customer-authenticated collection route', async () => {
+        await withApi(async (url, options) => {
+          assert.equal(url, 'https://gateway.example/ws/cart/items');
+          assert.equal(options.method, 'DELETE');
+          assert.equal(options.headers.Authorization, 'Bearer customer-token');
+          return new Response(null, { status: 204 });
+        }, async () => {
+          await clearCartItems('customer-token');
+        });
       });
     }
     return new Response(null, { status: 204 });
