@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Image,
   Modal,
   Pressable,
   Platform,
@@ -14,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { ProductImagesPicker } from '../components/ProductImagesPicker';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../services/apiClient';
 import {
@@ -128,7 +127,7 @@ export function AddSellerProductScreen({ navigation }) {
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [imageAsset, setImageAsset] = useState(null);
+  const [imageAssets, setImageAssets] = useState([]);
   const [productType, setProductType] = useState('');
   const [initialQuantity, setInitialQuantity] = useState('');
   const [subcategoryPickerVisible, setSubcategoryPickerVisible] = useState(false);
@@ -212,37 +211,6 @@ export function AddSellerProductScreen({ navigation }) {
     setSuccessMessage(null);
   }
 
-  async function handleSelectImage() {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          'Permissão necessária',
-          'Permita o acesso às fotos para anexar uma imagem ao produto.',
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setImageAsset(result.assets[0]);
-        setImageUrl('');
-        setSubmitError('');
-      }
-    } catch (error) {
-      Alert.alert(
-        'Não foi possível selecionar a foto',
-        error instanceof Error ? error.message : 'Tente novamente.',
-      );
-    }
-  }
-
   function showSuccessFeedback(productId, quantity) {
     const messageId = successMessageIdRef.current + 1;
     successMessageIdRef.current = messageId;
@@ -317,7 +285,7 @@ export function AddSellerProductScreen({ navigation }) {
       const productId = String(createdProduct.id);
       const quantity = quantityValidation.quantity;
 
-      if (imageAsset) {
+      if (imageAssets.length > 0) {
         setWorkflowStatus({
           status: 'pending',
           stage: 'image',
@@ -325,22 +293,26 @@ export function AddSellerProductScreen({ navigation }) {
           productType,
           quantity,
         });
-        try {
-          await uploadProductImage(productId, imageAsset, token);
-        } catch (error) {
-          const outcome = error instanceof ApiError && error.status >= 400 && error.status < 500
-            ? 'failed'
-            : 'unknown';
-          setWorkflowStatus({
-            status: 'partial',
-            stage: 'image',
-            outcome,
-            productId,
-            productType,
-            quantity,
-          });
-          setSubmitError(getErrorMessage(error, 'o envio da imagem'));
-          return;
+        for (let index = 0; index < imageAssets.length; index += 1) {
+          try {
+            await uploadProductImage(productId, imageAssets[index], token);
+          } catch (error) {
+            const outcome = error instanceof ApiError && error.status >= 400 && error.status < 500
+              ? 'failed'
+              : 'unknown';
+            setWorkflowStatus({
+              status: 'partial',
+              stage: 'image',
+              outcome,
+              productId,
+              productType,
+              quantity,
+            });
+            setSubmitError(
+              getErrorMessage(error, `o envio da imagem ${index + 1} de ${imageAssets.length}`),
+            );
+            return;
+          }
         }
       }
 
@@ -410,7 +382,7 @@ export function AddSellerProductScreen({ navigation }) {
       setPrice('');
       setDescription('');
       setImageUrl('');
-      setImageAsset(null);
+      setImageAssets([]);
       setSelectedSubcategory(null);
       setProductType('');
       setInitialQuantity('');
@@ -599,7 +571,7 @@ export function AddSellerProductScreen({ navigation }) {
           keyboardType="url"
           onChangeText={(value) => {
             setImageUrl(value);
-            setImageAsset(null);
+            setImageAssets([]);
             setSubmitError('');
           }}
           placeholder="https://exemplo.com/imagem.jpg"
@@ -607,28 +579,17 @@ export function AddSellerProductScreen({ navigation }) {
           style={styles.input}
           value={imageUrl}
         />
-        <Text style={styles.imageHint}>Ou anexe uma imagem do dispositivo:</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: isFormLocked }}
+        <ProductImagesPicker
+          selectedAssets={imageAssets}
+          onChange={(assets) => {
+            setImageAssets(assets);
+            if (assets.length > 0) {
+              setImageUrl('');
+            }
+            setSubmitError('');
+          }}
           disabled={isFormLocked}
-          onPress={handleSelectImage}
-          style={styles.imagePicker}
-        >
-          {imageAsset?.uri || imageUrl.trim() ? (
-            <Image
-              source={{ uri: imageAsset?.uri || imageUrl.trim() }}
-              style={styles.imagePreview}
-              resizeMode="cover"
-              accessibilityLabel={name || 'Imagem do produto'}
-            />
-          ) : (
-            <>
-              <Ionicons name="camera-outline" size={26} color={colors.forest} />
-              <Text style={styles.imagePickerText}>Selecionar imagem do dispositivo</Text>
-            </>
-          )}
-        </Pressable>
+        />
 
         <Text style={styles.label}>Informações do produto</Text>
         <TextInput
@@ -855,20 +816,6 @@ const styles = StyleSheet.create({
   productTypeSelectedLabel: { color: colors.forest, fontSize: 13, fontWeight: '800' },
   productTypeDescription: { color: colors.muted, fontSize: 11, marginTop: 4 },
   quantityHint: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: -10, marginBottom: 15 },
-  imagePicker: {
-    height: 180,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    marginBottom: 15,
-  },
-  imagePreview: { width: '100%', height: '100%' },
-  imagePickerText: { color: colors.forest, fontSize: 12, fontWeight: '700', marginTop: 7 },
-  imageHint: { color: colors.muted, fontSize: 11, marginTop: -7, marginBottom: 8 },
   descriptionInput: { minHeight: 118, paddingTop: 13 },
   loadErrorContainer: { marginTop: -8, marginBottom: 12 },
   errorText: { color: colors.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },

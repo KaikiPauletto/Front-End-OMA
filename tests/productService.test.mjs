@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createProduct,
+  getProductById,
   listAdminConfirmedSales,
   normalizeProductImageUrl,
   updateProduct,
+  uploadProductImage,
 } from '../src/services/productService.js';
 
 test('product image URL accepts HTTP URLs and rejects malformed or unsafe URLs', () => {
@@ -46,6 +48,105 @@ test('product creation and editing send the selected image URL to the API', asyn
     await updateProduct('42', product, 'admin-token');
   } finally {
     globalThis.fetch = previousFetch;
+    if (previousUrl === undefined) {
+      delete process.env.EXPO_PUBLIC_API_URL;
+    } else {
+      process.env.EXPO_PUBLIC_API_URL = previousUrl;
+    }
+  }
+});
+
+test('product details preserve every image and use the API primary image as the main image', async () => {
+  const previousUrl = process.env.EXPO_PUBLIC_API_URL;
+  const previousFetch = globalThis.fetch;
+  process.env.EXPO_PUBLIC_API_URL = 'https://gateway.example';
+  globalThis.fetch = async (url) => {
+    assert.equal(url, 'https://gateway.example/products/42?targetCurrency=BRL');
+    return new Response(JSON.stringify({
+      id: 42,
+      name: 'Cuia artesanal',
+      description: 'Cuia de porongo',
+      convertedPrice: 75,
+      price: 75,
+      active: true,
+      productType: 'SINGLE_UNIT',
+      image: 'https://images.example/legacy.jpg',
+      images: [
+        {
+          id: 8,
+          url: 'https://images.example/second.jpg',
+          isPrimary: false,
+          position: 2,
+        },
+        {
+          id: 7,
+          url: 'https://images.example/primary.jpg',
+          isPrimary: true,
+          position: 1,
+        },
+      ],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const product = await getProductById('42');
+    assert.equal(product.images.length, 2);
+    assert.deepEqual(product.images.map((image) => image.id), ['7', '8']);
+    assert.equal(product.image.uri, 'https://images.example/primary.jpg');
+    assert.equal(product.images[0].isPrimary, true);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUrl === undefined) {
+      delete process.env.EXPO_PUBLIC_API_URL;
+    } else {
+      process.env.EXPO_PUBLIC_API_URL = previousUrl;
+    }
+  }
+});
+
+test('image upload uses the authenticated multipart endpoint and validates its image response', async () => {
+  const previousUrl = process.env.EXPO_PUBLIC_API_URL;
+  const previousFetch = globalThis.fetch;
+  const previousWindow = globalThis.window;
+  process.env.EXPO_PUBLIC_API_URL = 'https://gateway.example';
+  globalThis.window = {};
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://gateway.example/ws/products/42/images');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.headers.Authorization, 'Bearer admin-token');
+    assert.equal(options.body.get('file').name, 'cuia.png');
+    assert.equal(options.headers['Content-Type'], undefined);
+    return new Response(JSON.stringify({
+      id: 7,
+      url: 'https://images.example/cuia.png',
+      isPrimary: true,
+      position: 1,
+    }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const image = await uploadProductImage('42', {
+      uri: 'blob:cuia',
+      fileName: 'cuia.png',
+      mimeType: 'image/png',
+      file: new File(['image'], 'cuia.png', { type: 'image/png' }),
+    }, 'admin-token');
+    assert.equal(image.id, '7');
+    assert.equal(image.isPrimary, true);
+    assert.equal(image.position, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
     if (previousUrl === undefined) {
       delete process.env.EXPO_PUBLIC_API_URL;
     } else {

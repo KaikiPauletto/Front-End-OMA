@@ -47,6 +47,26 @@ function hasIdentifier(value) {
     (typeof value === 'string' && value.trim().length > 0);
 }
 
+function mapProductImage(image) {
+  const id = isRecord(image) ? normalizePositiveInt64(image.id) : null;
+  if (
+    !isRecord(image) ||
+    !id ||
+    typeof image.url !== 'string' ||
+    !image.url.trim() ||
+    typeof image.isPrimary !== 'boolean' ||
+    !Number.isInteger(image.position) ||
+    image.position < 1
+  ) {
+    throw new InvalidCatalogResponseError();
+  }
+  return {
+    ...image,
+    id,
+    url: image.url.trim(),
+  };
+}
+
 function mapProduct(product) {
   if (
     !isRecord(product) ||
@@ -63,14 +83,28 @@ function mapProduct(product) {
     throw new Error('Não foi possível obter o preço do produto em BRL.');
   }
 
+  const images = product.images === undefined || product.images === null
+    ? []
+    : Array.isArray(product.images)
+      ? product.images.map(mapProductImage).sort((left, right) => left.position - right.position)
+      : null;
+  if (!images) {
+    throw new InvalidCatalogResponseError();
+  }
+  if (images.filter((image) => image.isPrimary).length > 1) {
+    throw new InvalidCatalogResponseError();
+  }
+  const primaryImage = images.find((image) => image.isPrimary) ?? images[0];
+  const primaryImageUrl = primaryImage?.url ??
+    (typeof product.image === 'string' && product.image.trim() ? product.image : null);
+
   return {
     ...product,
     id: String(product.id),
     category: hasIdentifier(product.categoryId) ? String(product.categoryId) : '',
     subcategory: hasIdentifier(product.subcategoryId) ? String(product.subcategoryId) : '',
-    image: typeof product.image === 'string' && product.image.trim()
-      ? { uri: product.image }
-      : null,
+    image: primaryImageUrl ? { uri: primaryImageUrl } : null,
+    images,
     price: product.convertedPrice,
     originalPrice: Number.isFinite(product.price) ? product.price : product.convertedPrice,
     type: product.productType === 'SINGLE_UNIT' ? 'UNITÁRIO' : 'QUANTITATIVO',
@@ -236,7 +270,7 @@ export async function uploadProductImage(productId, asset, token) {
     throw new InvalidCatalogResponseError();
   }
 
-  return response.data;
+  return mapProductImage(response.data);
 }
 
 export async function setProductActive(productId, active, token) {

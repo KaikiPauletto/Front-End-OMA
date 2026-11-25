@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { ProductImagesPicker } from './ProductImagesPicker';
 import { ProductImage } from './ProductImage';
 import { categories } from '../data/categories';
 import {
@@ -83,6 +84,7 @@ export function ProductEditModal({
   const [image, setImage] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
   const [imageAsset, setImageAsset] = useState(null);
+  const [imageAssets, setImageAssets] = useState([]);
   const [priceInput, setPriceInput] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [selectingSubcategory, setSelectingSubcategory] = useState(false);
@@ -113,6 +115,7 @@ export function ProductEditModal({
         : '',
     );
     setImageAsset(null);
+    setImageAssets([]);
     setPriceInput(formatPrice(String(Math.round(price * 100))));
     setSelectedSubcategory(remote ? null : getSubcategorySelection(product));
     setSelectingSubcategory(false);
@@ -265,7 +268,8 @@ export function ProductEditModal({
         ? {
           currency: currency.trim(),
           subcategoryId,
-          ...(!Array.isArray(product.images) || product.images.length === 0
+          ...((!Array.isArray(product.images) || product.images.length === 0) &&
+          imageAssets.length === 0
             ? { image: normalizedImageUrl }
             : {}),
         }
@@ -280,7 +284,13 @@ export function ProductEditModal({
     setIsSaving(true);
     setSubmitError('');
     try {
-      await onSave(editedProduct, remote ? imageAsset : null);
+      await onSave(
+        editedProduct,
+        remote ? imageAssets : null,
+        (uploadedAsset) => {
+          setImageAssets((assets) => assets.filter((asset) => asset.uri !== uploadedAsset.uri));
+        },
+      );
     } catch (error) {
       setSubmitError(getSaveErrorMessage(error));
     } finally {
@@ -391,11 +401,11 @@ export function ProductEditModal({
                       <TextInput
                         autoCapitalize="none"
                         autoCorrect={false}
-                        editable={!product.images?.length}
+                        editable={!product.images?.length && imageAssets.length === 0}
                         keyboardType="url"
                         onChangeText={(value) => {
                           setImageUrl(value);
-                          setImageAsset(null);
+                          setImageAssets([]);
                           setImage(value.trim() ? { uri: value.trim() } : null);
                           setSubmitError('');
                         }}
@@ -409,27 +419,17 @@ export function ProductEditModal({
                           Este produto já possui imagens anexadas; a URL legada não as substitui.
                         </Text>
                       ) : (
-                        <Text style={styles.imageHint}>Ou anexe uma imagem do dispositivo:</Text>
+                        <Text style={styles.imageHint}>Ou anexe imagens do dispositivo:</Text>
                       )}
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={handleSelectImage}
-                        style={styles.imagePicker}
-                      >
-                        {image ? (
-                          <ProductImage
-                            source={image}
-                            style={styles.preview}
-                            resizeMode="cover"
-                            accessibilityLabel={name || 'Imagem do produto'}
-                          />
-                        ) : (
-                          <>
-                            <Ionicons name="camera-outline" size={26} color={colors.forest} />
-                            <Text style={styles.imagePickerText}>Selecionar imagem do dispositivo</Text>
-                          </>
-                        )}
-                      </Pressable>
+                      <ProductImagesPicker
+                        selectedAssets={imageAssets}
+                        onChange={(assets) => {
+                          setImageAssets(assets);
+                          setSubmitError('');
+                        }}
+                        existingCount={product.images?.length ?? 0}
+                        disabled={isSaving}
+                      />
                     </>
                   ) : (
                     <>

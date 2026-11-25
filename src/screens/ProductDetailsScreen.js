@@ -172,6 +172,7 @@ export function ProductDetailsScreen({ navigation, route }) {
   const [apiProductAdminOrigin, setApiProductAdminOrigin] = useState(false);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [selectedImageId, setSelectedImageId] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [inventoryState, setInventoryState] = useState(null);
   const [inventoryReloadKey, setInventoryReloadKey] = useState(0);
@@ -195,6 +196,10 @@ export function ProductDetailsScreen({ navigation, route }) {
     ? apiProduct
     : null;
   const product = catalogProduct ?? sellerProduct ?? remoteProduct;
+  const productImages = Array.isArray(product?.images) ? product.images : [];
+  const primaryImage = productImages.find((image) => image.isPrimary) ?? productImages[0] ?? null;
+  const displayedImage = productImages.find((image) => image.id === selectedImageId) ?? primaryImage;
+  const displayedImageSource = displayedImage ? { uri: displayedImage.url } : product?.image;
   const isRemoteProduct = isAdminOrigin || (!catalogProduct && !sellerProduct);
   const isPublicApiProduct = Boolean(remoteProduct) && !isAdminOrigin && isCustomer;
   const isSellerProduct = !catalogProduct && Boolean(sellerProduct);
@@ -417,6 +422,10 @@ export function ProductDetailsScreen({ navigation, route }) {
   }, [product?.id, route.params?.justAdded, isCustomer, isAdminOrigin]);
 
   useEffect(() => {
+    setSelectedImageId(primaryImage?.id ?? null);
+  }, [product?.id, product?.images, primaryImage?.id]);
+
+  useEffect(() => {
     if (isAdministrator && route.params?.editOnOpen) {
       setEditModalVisible(true);
       navigation.setParams({ editOnOpen: false });
@@ -494,10 +503,11 @@ export function ProductDetailsScreen({ navigation, route }) {
     }
   }
 
-  async function handleSaveEdits(editedProduct, imageAsset) {
+  async function handleSaveEdits(editedProduct, imageAssets, onImageUploaded) {
     if (isRemoteProduct) {
-      if (imageAsset) {
+      for (const imageAsset of imageAssets ?? []) {
         await uploadProductImage(product.id, imageAsset, token);
+        onImageUploaded?.(imageAsset);
       }
       await updateRemoteProduct(product.id, editedProduct, token);
       setEditModalVisible(false);
@@ -804,7 +814,7 @@ export function ProductDetailsScreen({ navigation, route }) {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={[styles.artwork, { backgroundColor: product.backdrop || colors.surfaceMuted }]}>
           <ProductImage
-            source={product.image}
+            source={displayedImageSource}
             style={styles.productImage}
             fallbackEmoji={product.emoji || '🧉'}
             accessibilityLabel={product.name}
@@ -818,6 +828,38 @@ export function ProductDetailsScreen({ navigation, route }) {
             </View>
           ) : null}
         </View>
+        {productImages.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.productImageGallery}
+            accessibilityLabel="Imagens do produto"
+          >
+            {productImages.map((image, index) => (
+              <Pressable
+                key={image.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${image.isPrimary ? 'Imagem principal' : `Imagem ${index + 1}`} do produto`}
+                accessibilityState={{ selected: image.id === displayedImage?.id }}
+                onPress={() => setSelectedImageId(image.id)}
+                style={[
+                  styles.productImageThumbnail,
+                  image.id === displayedImage?.id && styles.productImageThumbnailSelected,
+                ]}
+              >
+                <ProductImage
+                  source={{ uri: image.url }}
+                  style={styles.productImageThumbnailImage}
+                  resizeMode="cover"
+                  accessibilityLabel={`${product.name} - imagem ${index + 1}`}
+                />
+                {image.isPrimary ? (
+                  <Text style={styles.primaryImageLabel}>Principal</Text>
+                ) : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
 
         <View style={styles.content}>
           <Text style={styles.category}>
@@ -1275,6 +1317,30 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
   artwork: { height: 330, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   productImage: { width: '100%', height: '100%' },
+  productImageGallery: { gap: 9, paddingHorizontal: 18, paddingVertical: 11 },
+  productImageThumbnail: {
+    width: 70,
+    height: 70,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  productImageThumbnailSelected: { borderColor: colors.forest },
+  productImageThumbnailImage: { width: '100%', height: '100%' },
+  primaryImageLabel: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    color: colors.white,
+    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    fontSize: 7,
+    fontWeight: '700',
+  },
   backButton: {
     position: 'absolute',
     top: 12,
