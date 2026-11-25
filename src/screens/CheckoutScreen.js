@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AppState,
-  Linking,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,10 +21,12 @@ import { lookupBrazilianPostalCode } from '../services/cepService';
 import {
   createCheckoutSession,
   createOrder,
+  getCheckoutSessionErrorMessage,
   getPaymentStatus,
 } from '../services/ordersService.js';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
+import { openCheckoutUrl } from '../utils/openCheckoutUrl';
 
 const addressFields = [
   { key: 'state', label: 'Estado', placeholder: 'Ex.: RS' },
@@ -79,12 +80,10 @@ export function CheckoutScreen({ navigation }) {
     setIsLaunchingPayment(true);
     try {
       const session = await createCheckoutSession(order.id, token);
-      await Linking.openURL(session.checkoutUrl);
+      await openCheckoutUrl(session.checkoutUrl);
       setPaymentStatus('PENDING');
     } catch (error) {
-      setPaymentError(error instanceof Error
-        ? error.message
-        : 'Não foi possível abrir o checkout do Stripe.');
+      setPaymentError(getCheckoutSessionErrorMessage(error));
     } finally {
       setIsLaunchingPayment(false);
     }

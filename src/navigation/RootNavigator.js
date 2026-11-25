@@ -11,6 +11,9 @@ import { CheckoutScreen } from '../screens/CheckoutScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
+import { PaymentResultScreen } from '../screens/PaymentResultScreen';
+import { PaymentReturnGateScreen } from '../screens/PaymentReturnGateScreen';
+import { clearPendingPaymentReturn, loadPendingPaymentReturn } from '../services/browserSession';
 import { ProductDetailsScreen } from '../screens/ProductDetailsScreen';
 import { ProductsScreen } from '../screens/ProductsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -172,11 +175,22 @@ export function RootNavigator() {
   const { user } = useAuth();
   const isCustomer = user?.role === 'CLIENTE';
   const isAdministrator = user?.role === 'ADMINISTRADOR';
+  // Retorno do Stripe guardado antes do login: após entrar como cliente,
+  // abre direto a tela de resultado com o mesmo order_id.
+  const pendingPaymentReturn = isCustomer ? loadPendingPaymentReturn() : null;
+  if (user && !isCustomer) {
+    clearPendingPaymentReturn();
+  }
+  const initialRouteName = !user
+    ? 'Welcome'
+    : pendingPaymentReturn
+      ? 'PaymentResult'
+      : 'MainTabs';
 
   return (
     <Stack.Navigator
       key={user?.id ?? 'guest'}
-      initialRouteName={user ? 'MainTabs' : 'Welcome'}
+      initialRouteName={initialRouteName}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: colors.canvas },
@@ -192,12 +206,28 @@ export function RootNavigator() {
           <Stack.Screen name="Produtos" component={ProductsScreen} />
           <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
           {isCustomer ? <Stack.Screen name="Checkout" component={CheckoutScreen} /> : null}
+          {isCustomer ? (
+            <Stack.Screen
+              name="PaymentResult"
+              component={PaymentResultScreen}
+              initialParams={pendingPaymentReturn
+                ? {
+                  result: pendingPaymentReturn.result,
+                  order_id: pendingPaymentReturn.orderId,
+                  ...(pendingPaymentReturn.sessionId
+                    ? { session_id: pendingPaymentReturn.sessionId }
+                    : {}),
+                }
+                : undefined}
+            />
+          ) : null}
         </>
       ) : (
         <>
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="PaymentResult" component={PaymentReturnGateScreen} />
         </>
       )}
     </Stack.Navigator>

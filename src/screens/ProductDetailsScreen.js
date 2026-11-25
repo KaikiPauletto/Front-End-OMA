@@ -214,6 +214,7 @@ export function ProductDetailsScreen({ navigation, route }) {
     : null;
   const [variantId, setVariantId] = useState(product?.variants?.[0]?.id ?? null);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [addToCartMessage, setAddToCartMessage] = useState('');
   const [cartConfirmationVisible, setCartConfirmationVisible] = useState(
     Boolean(route.params?.justAdded) && isCustomer && !isAdminOrigin,
   );
@@ -224,6 +225,7 @@ export function ProductDetailsScreen({ navigation, route }) {
   const productStatusLock = useRef(false);
   const {
     addItem,
+    items: cartItems,
     itemCount,
     status: cartStatus,
     error: cartError,
@@ -419,6 +421,7 @@ export function ProductDetailsScreen({ navigation, route }) {
   useEffect(() => {
     setVariantId(product?.variants?.[0]?.id ?? null);
     setCartConfirmationVisible(Boolean(route.params?.justAdded) && isCustomer && !isAdminOrigin);
+    setAddToCartMessage('');
   }, [product?.id, route.params?.justAdded, isCustomer, isAdminOrigin]);
 
   useEffect(() => {
@@ -473,30 +476,35 @@ export function ProductDetailsScreen({ navigation, route }) {
   }
 
   const unitPrice = getProductPrice(product, variant);
+  // O catálogo público não informa estoque; a disponibilidade só é conhecida
+  // quando o produto já está na sacola (GET /ws/cart retorna availableQuantity).
+  const cartItemForProduct = cartItems.find((item) => item.productId === String(product.id));
+  const isOutOfStock = normalizeNonNegativeInt64(cartItemForProduct?.availableQuantity) === '0';
   const canAddToCart = isPublicApiProduct &&
     product.active !== false &&
+    !isOutOfStock &&
     cartStatus === 'ready' &&
     !isCartMutating &&
     !reconciliationRequired &&
     !addingToCart;
 
   async function handleAdd() {
-    if (!isPublicApiProduct || addingToCart || isCartMutating) {
+    if (!isPublicApiProduct || isOutOfStock || addingToCart || isCartMutating) {
       return;
     }
 
     setAddingToCart(true);
+    setAddToCartMessage('');
     try {
       const result = await addItem(product, null, 1);
       if (result?.ok) {
         setCartConfirmationVisible(true);
       } else {
-        Alert.alert('Não foi possível adicionar', result?.message ?? 'Tente novamente.');
+        setAddToCartMessage(result?.message ?? 'Não foi possível adicionar. Tente novamente.');
       }
     } catch (error) {
-      Alert.alert(
-        'Não foi possível adicionar',
-        error instanceof Error ? error.message : 'Tente novamente.',
+      setAddToCartMessage(
+        error instanceof Error ? error.message : 'Não foi possível adicionar. Tente novamente.',
       );
     } finally {
       setAddingToCart(false);
@@ -1230,6 +1238,15 @@ export function ProductDetailsScreen({ navigation, route }) {
           <View>
             <Text style={styles.totalLabel}>Valor unitário</Text>
             <Text style={styles.total}>{formatCurrency(unitPrice)}</Text>
+            {isOutOfStock ? (
+              <Text accessibilityRole="alert" style={styles.cartActionError}>
+                Produto sem estoque.
+              </Text>
+            ) : addToCartMessage && addToCartMessage !== cartError ? (
+              <Text accessibilityRole="alert" style={styles.cartActionError}>
+                {addToCartMessage}
+              </Text>
+            ) : null}
             {cartError ? (
               <>
                 <Text style={styles.cartActionError}>{cartError}</Text>
@@ -1255,7 +1272,9 @@ export function ProductDetailsScreen({ navigation, route }) {
                 ? 'Adicionando...'
                 : ['loading', 'refreshing', 'idle'].includes(cartStatus)
                   ? 'Carregando sacola...'
-                  : 'Adicionar ao carrinho'}
+                  : isOutOfStock
+                    ? 'Sem estoque'
+                    : 'Adicionar ao carrinho'}
             </Text>
           </Pressable>
         </View>

@@ -23,7 +23,9 @@ export function LoginScreen({ navigation, route }) {
   const { signIn } = useAuth();
   const registrationMessage = route?.params?.registrationSucceeded
     ? 'Conta criada com sucesso. Faça login para continuar.'
-    : '';
+    : route?.params?.paymentReturnOrderId
+      ? `Entre para confirmar o pagamento do pedido #${route.params.paymentReturnOrderId}.`
+      : '';
 
   async function handleSubmit() {
     if (submitLock.current) {

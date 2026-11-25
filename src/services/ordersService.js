@@ -264,6 +264,31 @@ export async function listOrders(token) {
   return orders;
 }
 
+export function getCheckoutSessionErrorMessage(error) {
+  if (error instanceof ApiError) {
+    if ([502, 503, 504].includes(error.status)) {
+      return 'Não foi possível iniciar o pagamento. Tente de novo.';
+    }
+    if (error.status === 401) {
+      return 'Sua sessão expirou. Entre novamente para pagar.';
+    }
+    if (error.status === 403) {
+      return 'Sua conta não tem permissão para pagar este pedido.';
+    }
+    if (error.status === 404) {
+      return 'Pedido não encontrado. Atualize seus pedidos e tente de novo.';
+    }
+    if (error.status === 409) {
+      return 'Este pedido não pode mais ser pago. Atualize seus pedidos.';
+    }
+    return `Não foi possível iniciar o pagamento (HTTP ${error.status}). Tente de novo.`;
+  }
+  if (error instanceof InvalidOrderResponseError) {
+    return 'Não foi possível iniciar o pagamento: resposta inválida do servidor. Tente de novo.';
+  }
+  return 'Não foi possível iniciar o pagamento. Verifique a conexão e tente de novo.';
+}
+
 export async function createCheckoutSession(orderId, token) {
   requireToken(token);
   const normalizedOrderId = getIdentifier(orderId);

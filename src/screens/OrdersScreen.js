@@ -2,7 +2,6 @@ import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,10 +15,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useOrders } from '../contexts/OrdersContext';
 import {
   createCheckoutSession,
+  getCheckoutSessionErrorMessage,
   getPaymentStatus,
 } from '../services/ordersService.js';
 import { colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatCurrency';
+import { openCheckoutUrl } from '../utils/openCheckoutUrl';
 
 const orderStatusLabels = {
   RESERVATION_PENDING: 'Preparando reserva',
@@ -123,15 +124,13 @@ export function OrdersScreen({ navigation }) {
     activePaymentOrderIdRef.current = orderId;
     try {
       const session = await createCheckoutSession(orderId, token);
-      await Linking.openURL(session.checkoutUrl);
+      await openCheckoutUrl(session.checkoutUrl);
       setPaymentStatuses((current) => ({ ...current, [orderId]: 'PENDING' }));
     } catch (requestError) {
       activePaymentOrderIdRef.current = null;
       setPaymentErrors((current) => ({
         ...current,
-        [orderId]: requestError instanceof Error
-          ? requestError.message
-          : 'Não foi possível abrir o checkout do Stripe.',
+        [orderId]: getCheckoutSessionErrorMessage(requestError),
       }));
     } finally {
       setPendingActionOrderId(null);

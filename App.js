@@ -9,19 +9,15 @@ import { ProductCatalogProvider } from './src/contexts/ProductCatalogContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { colors } from './src/theme/colors';
 
+// Retorno do Stripe:
+// - celular: oma://payment/success?order_id=<id>&session_id=<id> (e /cancel)
+// - web:     http://localhost:8081/payment/success?order_id=<id>&session_id=<id>
+// Os parâmetros de query (order_id, session_id) chegam em route.params.
 const linking = {
   prefixes: ['oma://'],
   config: {
     screens: {
-      MainTabs: {
-        screens: {
-          Conta: {
-            screens: {
-              Pedidos: 'payment/:result',
-            },
-          },
-        },
-      },
+      PaymentResult: 'payment/:result',
     },
   },
 };

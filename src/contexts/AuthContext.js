@@ -1,16 +1,25 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import { authenticateUser, revokeToken } from '../services/authService';
+import {
+  clearAuthSession,
+  clearPendingPaymentReturn,
+  loadAuthSession,
+  saveAuthSession,
+} from '../services/browserSession';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  // Na web, restaura a sessão do sessionStorage (sobrevive ao reload da volta
+  // do Stripe). No celular, loadAuthSession devolve null e a sessão segue em memória.
+  const [session, setSession] = useState(() => loadAuthSession());
+  const user = session?.user ?? null;
+  const token = session?.token ?? null;
 
   async function signIn(email, password) {
-    const session = await authenticateUser({ email, password });
-    setUser(session.user);
-    setToken(session.token);
+    const nextSession = await authenticateUser({ email, password });
+    saveAuthSession(nextSession);
+    setSession(nextSession);
   }
 
   async function signOut() {
@@ -27,8 +36,9 @@ export function AuthProvider({ children }) {
     } catch (error) {
       return { serverRevoked: false, error };
     } finally {
-      setUser(null);
-      setToken(null);
+      clearAuthSession();
+      clearPendingPaymentReturn();
+      setSession(null);
     }
   }
 

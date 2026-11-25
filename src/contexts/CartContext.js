@@ -42,8 +42,11 @@ function quantityFitsAvailability(quantity, availableQuantity) {
     (requested.length === available.length && requested <= available);
 }
 
-function getCartErrorMessage(error) {
+function getCartErrorMessage(error, operation = null) {
   if (error instanceof ApiError) {
+    if (error.status === 409 && operation === 'add') {
+      return 'Produto sem estoque suficiente.';
+    }
     if (error.status === 400) {
       return 'A quantidade informada não é válida para este produto.';
     }
@@ -413,7 +416,7 @@ export function CartProvider({ children }) {
       }
       return {
         ok: false,
-        message: getCartErrorMessage(error),
+        message: getCartErrorMessage(error, operation),
         uncertain: reconciliationFailed || needsReconciliation(error),
       };
     } finally {
