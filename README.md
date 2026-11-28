@@ -4,12 +4,14 @@ Aplicativo mobile em React Native com Expo, escrito em JavaScript. Autenticaçã
 
 ## Executar
 
+Requer Node.js 22.13 ou superior (ou 24.3 ou superior) e o back-end no ar em `http://localhost:8080`.
+
 ```bash
 npm install
-npm start
+npm run web
 ```
 
-Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run android` e `npm run ios` também estão disponíveis.
+O app abre no navegador em `http://localhost:8081`, sem arquivo `.env`. Para testar no celular, use `npm start`, leia o QR code no Expo Go e configure `EXPO_PUBLIC_API_URL` (abaixo). Os comandos `npm run android` e `npm run ios` também estão disponíveis.
 
 ## Estrutura
 
@@ -30,7 +32,7 @@ Abra o projeto no Expo Go lendo o QR code do terminal. Os comandos `npm run andr
 
 ## Integração com o backend
 
-Copie `.env.example` para `.env` e ajuste `EXPO_PUBLIC_API_URL` para a URL-base do API Gateway fornecida pela equipe do backend. No Expo Go, configure um host acessível pelo dispositivo; `localhost` pode apontar para o próprio dispositivo. Variáveis `EXPO_PUBLIC_` ficam disponíveis no aplicativo e não devem conter segredos.
+A URL-base do API Gateway é `EXPO_PUBLIC_API_URL`, com padrão `http://localhost:8080`; no navegador, na mesma máquina do back-end, não é preciso configurar nada. Para usar outro endereço, copie `.env.example` para `.env` e ajuste o valor. No Expo Go, configure um host acessível pelo dispositivo, pois `localhost` aponta para o próprio dispositivo. Variáveis `EXPO_PUBLIC_` ficam disponíveis no aplicativo e não devem conter segredos.
 
 Cadastro, login e logout seguem os contratos documentados em `API.md`. O cadastro cria uma conta de cliente e não autentica automaticamente; o JWT de login é mantido somente em memória e enviado como Bearer apenas em requisições autenticadas. A listagem pública, busca, filtros por categoria/subcategoria e faixa de preço, ordenação e consulta de detalhes usam os endpoints públicos documentados em `API.md`. Administradores podem criar produtos em `POST /ws/products`, editar em `PUT /ws/products/{id}`, ativar/desativar em `PATCH /ws/products/{id}/status` e consultar a aba Vendas por `GET /ws/products`, filtrando por `ACTIVE`, `INACTIVE` ou `ALL` (padrão `ACTIVE`). Os detalhes abertos pela aba Vendas usam `GET /ws/products/{id}` e consultam o estoque real em `GET /ws/inventory/{productId}`; ambas as consultas administrativas usam o JWT de administrador. A lista da aba Vendas não exibe quantidades de estoque, que são apresentadas nos detalhes administrativos do produto. Categorias e subcategorias são carregadas pela API. Os cards administrativos oferecem atalho para edição. No cadastro administrativo, o frontend cria o produto, registra o estoque e, para quantidade inicial positiva, registra uma entrada; quantidade zero cria apenas o registro de estoque, com saldo físico zerado. As etapas não são atômicas: em falhas parciais, a tela mantém o ID e a etapa pendente e não repete automaticamente operações POST de resultado incerto; a conferência deve ser manual. O cadastro e a edição administrativa permitem anexar até oito imagens por produto; a primeira imagem enviada é principal, e os detalhes exibem a galeria retornada pela API.
 
@@ -42,7 +44,16 @@ A aba administrativa `Estoque` lista somente registros de inventário existentes
 
 O carrinho de CLIENTE é carregado e atualizado pelos endpoints públicos `GET /ws/cart`, `POST /ws/cart/items`, `PATCH /ws/cart/items/{productId}` e `DELETE /ws/cart/items/{productId}`, usando o JWT do AuthContext. O POST substitui a quantidade desejada; ao adicionar novamente um produto `MULTI_UNIT`, o frontend calcula o total desejado antes de enviar o upsert. O carrinho não utiliza preços ou disponibilidade demonstrativos como fallback. IDs e saldos inteiros longos são preservados pelo parser lossless. Produtos locais/demonstrativos com variantes não são enviados ao carrinho persistente porque o contrato atual não contém `variantId`.
 
-O checkout envia somente IDs, quantidades e endereço para `POST /ws/orders`, usando `Idempotency-Key` para permitir retentativas sem duplicar pedidos. O servidor valida os produtos, calcula o preço e o frete e reserva o estoque; somente após a criação confirmada do pedido o app limpa a sacola. O pagamento é iniciado por `POST /ws/payments/orders/{orderId}/checkout-session` e aberto na página hospedada do Stripe; dados de cartão e segredos não passam pelo app. O status é consultado em `GET /ws/payments/orders/{orderId}` e os pedidos persistidos são carregados por `GET /ws/orders`. O Stripe Checkout documentado está em modo de teste e aceita cartão. O `NavigationContainer` reconhece `oma://payment/success` e `oma://payment/cancel`; configure as URLs de sucesso/cancelamento do Payment API para esses endereços. A aprovação depende do webhook do Stripe, não do redirecionamento.
+O checkout envia somente IDs, quantidades e endereço para `POST /ws/orders`, usando `Idempotency-Key` para permitir retentativas sem duplicar pedidos. O servidor valida os produtos, calcula o preço e o frete e reserva o estoque; somente após a criação confirmada do pedido o app limpa a sacola. O pagamento é iniciado por `POST /ws/payments/orders/{orderId}/checkout-session`, e o app abre a `checkoutUrl` recebida; dados de cartão e segredos não passam pelo app. O status é consultado em `GET /ws/payments/orders/{orderId}` e os pedidos persistidos são carregados por `GET /ws/orders`. O `NavigationContainer` reconhece `oma://payment/success` e `oma://payment/cancel` (com `order_id` na query); configure o retorno de sucesso/cancelamento do backend para esses endereços.
+
+O Payment API pode operar em dois modos, escolhidos na configuração do backend. A resposta do checkout-session e da consulta de status pode trazer o campo opcional `provider` (`stripe` ou `simulated`); sem ele, o app funciona normalmente, apenas sem identificar o modo.
+
+- **Stripe** (`provider: "stripe"`): a `checkoutUrl` é a página hospedada do Stripe (`https://checkout.stripe.com`), em modo de teste e somente com cartão. A sessão começa `PENDING` e, nesse modo, a aprovação depende do webhook do Stripe, não do redirecionamento.
+- **Simulado** (`provider: "simulated"`): não há página do Stripe nem webhook. O checkout-session já devolve o pagamento `APPROVED`, e a `checkoutUrl` aponta para a rota de retorno de sucesso do API Gateway, que redireciona para o mesmo deep link, `oma://payment/success`. Quando `provider` é `simulated`, o app mostra o aviso **Pagamento simulado (ambiente de demonstração)** na confirmação do checkout, na tela de retorno do pagamento e, quando o pagamento é iniciado ou verificado por **Meus pedidos**, no cartão do pedido.
+
+Por segurança, o app só abre uma `checkoutUrl` do Stripe ou do próprio API Gateway: no modo simulado, protocolo, host e porta da URL devem ser iguais aos de `EXPO_PUBLIC_API_URL`.
+
+O Expo Go não registra o esquema `oma://`, portanto o retorno automático ao app só ocorre em um development build ou build instalado. No Expo Go, volte manualmente do navegador para o app: a tela de confirmação (ou **Meus pedidos**) consulta o status novamente.
 
 Se uma inclusão na sacola for recusada por conflito de estoque (`409`), o app consulta novamente a sacola automaticamente para reconciliar quantidades e liberar novas tentativas sem exigir atualização manual. A API pública atual do catálogo não inclui disponibilidade de estoque; ocultar produtos esgotados nas listagens requer que o backend exponha essa informação ou ofereça um filtro público de disponibilidade.
 

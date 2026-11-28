@@ -131,6 +131,55 @@ test('payment status treats a missing payment as not started and rejects non-Str
   });
 });
 
+function checkoutResponse(fields) {
+  return async () => new Response(
+    JSON.stringify({ paymentId: 15, orderId: 42, ...fields }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+test('checkout session accepts an approved simulated payment on the Gateway, with or without provider', async () => {
+  const checkoutUrl = 'https://gateway.example/payments/success?order_id=42';
+  for (const provider of ['simulated', undefined]) {
+    await withApi(checkoutResponse({ status: 'APPROVED', checkoutUrl, provider }), async () => {
+      const session = await createCheckoutSession('42', 'customer-token');
+      assert.equal(session.status, 'APPROVED');
+      assert.equal(session.checkoutUrl, checkoutUrl);
+      assert.equal(session.provider, provider ?? null);
+    });
+  }
+});
+
+test('checkout session rejects unexpected hosts, statuses and provider mismatches', async () => {
+  const gatewayUrl = 'https://gateway.example/payments/success?order_id=42';
+  const invalid = [
+    { status: 'APPROVED', provider: 'simulated', checkoutUrl: 'https://example.com/success' },
+    { status: 'APPROVED', provider: 'simulated', checkoutUrl: 'http://gateway.example/success' },
+    { status: 'APPROVED', provider: 'simulated', checkoutUrl: 'https://gateway.example@example.com/' },
+    { status: 'FAILED', provider: 'simulated', checkoutUrl: gatewayUrl },
+    { status: 'APPROVED', provider: 'stripe', checkoutUrl: gatewayUrl },
+    { status: 'APPROVED', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_123' },
+  ];
+  for (const fields of invalid) {
+    await withApi(checkoutResponse(fields), async () => {
+      await assert.rejects(
+        createCheckoutSession('42', 'customer-token'),
+        InvalidOrderResponseError,
+        JSON.stringify(fields),
+      );
+    });
+  }
+});
+
+test('payment status exposes the optional provider', async () => {
+  const payment = { status: 'APPROVED', amount: 10, currency: 'BRL' };
+  for (const [provider, expected] of [['simulated', 'simulated'], ['stripe', 'stripe'], [undefined, null]]) {
+    await withApi(checkoutResponse({ ...payment, provider }), async () => {
+      assert.equal((await getPaymentStatus('42', 'customer-token')).provider, expected);
+    });
+  }
+});
+
 test('order service preserves API errors and rejects malformed order payloads', async () => {
   await withApi(async () => new Response('Conflict', { status: 409 }), async () => {
     await assert.rejects(

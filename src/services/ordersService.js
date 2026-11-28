@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from './apiClient.js';
+import { ApiError, apiRequest, getApiBaseUrl } from './apiClient.js';
 import { normalizePositiveInt64 } from './int64.js';
 import { parseJsonPreservingInt64 } from './losslessJson.js';
 
@@ -20,6 +20,7 @@ const paymentStatuses = [
   'CANCELLED',
   'REFUNDED',
 ];
+const paymentProviders = ['simulated', 'stripe'];
 const MAX_ORDER_QUANTITY = 2147483647;
 
 export class InvalidOrderResponseError extends Error {
@@ -289,6 +290,27 @@ export function getCheckoutSessionErrorMessage(error) {
   return 'Não foi possível iniciar o pagamento. Verifique a conexão e tente de novo.';
 }
 
+// Campo opcional: ausente ou desconhecido é tratado como não informado.
+function getPaymentProvider(value) {
+  return paymentProviders.includes(value) ? value : null;
+}
+
+// Só duas origens de checkout são abertas:
+// - Stripe: página hospedada, sempre com o pagamento ainda PENDING;
+// - modo simulado: rota de retorno no próprio API Gateway, já APPROVED.
+function isAllowedCheckout(url, status, provider) {
+  if (url.protocol === 'https:' && url.hostname === 'checkout.stripe.com') {
+    return status === 'PENDING';
+  }
+  if (provider === 'stripe') {
+    return false;
+  }
+  const gatewayUrl = new URL(getApiBaseUrl());
+  return url.protocol === gatewayUrl.protocol &&
+    url.host === gatewayUrl.host &&
+    ['PENDING', 'APPROVED'].includes(status);
+}
+
 export async function createCheckoutSession(orderId, token) {
   requireToken(token);
   const normalizedOrderId = getIdentifier(orderId);
@@ -318,12 +340,11 @@ export async function createCheckoutSession(orderId, token) {
   } catch {
     throw new InvalidOrderResponseError();
   }
+  const provider = getPaymentProvider(response.data.provider);
   if (
     !paymentId ||
     responseOrderId !== normalizedOrderId ||
-    response.data.status !== 'PENDING' ||
-    checkoutUrl.protocol !== 'https:' ||
-    checkoutUrl.hostname !== 'checkout.stripe.com'
+    !isAllowedCheckout(checkoutUrl, response.data.status, provider)
   ) {
     throw new InvalidOrderResponseError();
   }
@@ -333,6 +354,7 @@ export async function createCheckoutSession(orderId, token) {
     orderId: normalizedOrderId,
     status: response.data.status,
     checkoutUrl: checkoutUrl.toString(),
+    provider,
   };
 }
 
@@ -377,5 +399,6 @@ export async function getPaymentStatus(orderId, token) {
     status: response.status,
     amount: response.amount,
     currency: response.currency,
+    provider: getPaymentProvider(response.provider),
   };
 }

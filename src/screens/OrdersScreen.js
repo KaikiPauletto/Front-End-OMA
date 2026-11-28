@@ -11,6 +11,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { AppHeader } from '../components/AppHeader';
 import { EmptyState } from '../components/EmptyState';
+import { SimulatedPaymentNotice } from '../components/SimulatedPaymentNotice';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrders } from '../contexts/OrdersContext';
 import {
@@ -52,6 +53,7 @@ export function OrdersScreen({ navigation }) {
   const { token } = useAuth();
   const { orders, status, error, refreshOrders } = useOrders();
   const [paymentStatuses, setPaymentStatuses] = useState({});
+  const [paymentProviders, setPaymentProviders] = useState({});
   const [paymentErrors, setPaymentErrors] = useState({});
   const [pendingActionOrderId, setPendingActionOrderId] = useState(null);
   const activePaymentOrderIdRef = useRef(null);
@@ -74,6 +76,9 @@ export function OrdersScreen({ navigation }) {
           ...current,
           [orderId]: payment?.status ?? 'NOT_STARTED',
         }));
+        if (payment?.provider) {
+          setPaymentProviders((current) => ({ ...current, [orderId]: payment.provider }));
+        }
         if (!payment || !['CREATED', 'PENDING'].includes(payment.status)) {
           break;
         }
@@ -124,8 +129,9 @@ export function OrdersScreen({ navigation }) {
     activePaymentOrderIdRef.current = orderId;
     try {
       const session = await createCheckoutSession(orderId, token);
+      setPaymentProviders((current) => ({ ...current, [orderId]: session.provider }));
       await openCheckoutUrl(session.checkoutUrl);
-      setPaymentStatuses((current) => ({ ...current, [orderId]: 'PENDING' }));
+      setPaymentStatuses((current) => ({ ...current, [orderId]: session.status }));
     } catch (requestError) {
       activePaymentOrderIdRef.current = null;
       setPaymentErrors((current) => ({
@@ -206,6 +212,10 @@ export function OrdersScreen({ navigation }) {
                     {paymentStatusLabels[paymentStatus] ?? paymentStatus}
                   </Text>
                 ) : null}
+                <SimulatedPaymentNotice
+                  provider={paymentProviders[order.id]}
+                  style={styles.paymentNotice}
+                />
                 {order.items.map((item) => (
                   <View key={item.key} style={styles.itemRow}>
                     <View style={styles.itemDescription}>
@@ -301,6 +311,7 @@ const styles = StyleSheet.create({
   orderDate: { color: colors.muted, fontSize: 10, marginTop: 4 },
   status: { color: colors.clay, fontSize: 11, fontWeight: '800', marginTop: 9 },
   paymentStatus: { color: colors.forest, fontSize: 11, fontWeight: '700', marginTop: 5 },
+  paymentNotice: { marginTop: 5 },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 12 },
   itemDescription: { flex: 1 },
   productName: { color: colors.ink, fontSize: 12, fontWeight: '700' },

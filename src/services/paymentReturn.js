@@ -34,9 +34,15 @@ export function parsePaymentReturnParams(params) {
   return { ok: true, result, orderId, sessionId };
 }
 
-export function describePaymentStatus(status) {
+export function describePaymentStatus(status, provider) {
   if (status === 'APPROVED') {
-    return { kind: 'approved', title: 'Pagamento aprovado', message: 'Recebemos a confirmação do Stripe.' };
+    return {
+      kind: 'approved',
+      title: 'Pagamento aprovado',
+      message: provider === 'simulated'
+        ? 'O pagamento deste pedido foi confirmado.'
+        : 'Recebemos a confirmação do Stripe.',
+    };
   }
   if (pendingStatuses.includes(status)) {
     return {
@@ -79,7 +85,7 @@ export async function pollPaymentStatus({
       lastError = null;
       lastPayment = payment;
       const status = payment?.status ?? null;
-      const description = describePaymentStatus(status);
+      const description = describePaymentStatus(status, payment?.provider);
       onUpdate({ attempt, payment, status, description, error: null });
       if (description.kind !== 'pending') {
         return { outcome: description.kind, status, payment, attempts: attempt };
