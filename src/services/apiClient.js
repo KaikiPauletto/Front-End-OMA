@@ -1,10 +1,9 @@
-function getApiBaseUrl() {
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (!baseUrl) {
-    throw new Error(
-      'API não configurada. Defina EXPO_PUBLIC_API_URL no ambiente do Expo.',
-    );
-  }
+// Gateway do back-end na própria máquina (web). Para celular ou emulador, defina
+// EXPO_PUBLIC_API_URL com um endereço que o dispositivo alcance.
+const DEFAULT_API_URL = 'http://localhost:8080';
+
+export function getApiBaseUrl() {
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_API_URL;
   return baseUrl.replace(/\/+$/, '');
 }
 

@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ProductImage } from '../components/ProductImage';
+import { SimulatedPaymentNotice } from '../components/SimulatedPaymentNotice';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useOrders } from '../contexts/OrdersContext';
@@ -45,7 +46,7 @@ function formatEstimate(value) {
 export function CheckoutScreen({ navigation }) {
   const { user, token } = useAuth();
   const { items, subtotal, estimateComplete, clearItems } = useCart();
-  const { refreshOrders } = useOrders();
+  const { orders, refreshOrders } = useOrders();
   const [addressVisible, setAddressVisible] = useState(false);
   const [address, setAddress] = useState({
     state: '',
@@ -64,6 +65,7 @@ export function CheckoutScreen({ navigation }) {
   const [postalCodeVerified, setPostalCodeVerified] = useState(false);
   const [createdOrder, setCreatedOrder] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [paymentProvider, setPaymentProvider] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLaunchingPayment, setIsLaunchingPayment] = useState(false);
   const idempotencyAttemptRef = useRef(null);
@@ -80,8 +82,9 @@ export function CheckoutScreen({ navigation }) {
     setIsLaunchingPayment(true);
     try {
       const session = await createCheckoutSession(order.id, token);
+      setPaymentProvider(session.provider);
       await openCheckoutUrl(session.checkoutUrl);
-      setPaymentStatus('PENDING');
+      setPaymentStatus(session.status);
     } catch (error) {
       setPaymentError(getCheckoutSessionErrorMessage(error));
     } finally {
@@ -106,6 +109,9 @@ export function CheckoutScreen({ navigation }) {
           const payment = await getPaymentStatus(createdOrder.id, token);
           if (active) {
             setPaymentStatus(payment?.status ?? '');
+            if (payment?.provider) {
+              setPaymentProvider(payment.provider);
+            }
             setPaymentError('');
           }
           if (!payment || !['CREATED', 'PENDING'].includes(payment.status)) {
@@ -129,6 +135,13 @@ export function CheckoutScreen({ navigation }) {
       subscription.remove();
     };
   }, [createdOrder, token]);
+
+  // Com o pagamento aprovado, recarrega os pedidos para exibir a confirmação.
+  useEffect(() => {
+    if (paymentStatus === 'APPROVED') {
+      refreshOrders();
+    }
+  }, [paymentStatus, refreshOrders]);
 
   async function calculateShipping(cep = postalCode) {
     setIsLookingUpPostalCode(true);
@@ -265,6 +278,8 @@ export function CheckoutScreen({ navigation }) {
   }
 
   if (createdOrder) {
+    const orderStatus = orders.find((order) => order.id === createdOrder.id)?.status
+      ?? createdOrder.status;
     return (
       <View style={styles.successScreen}>
         <View style={styles.successIcon}>
@@ -272,28 +287,35 @@ export function CheckoutScreen({ navigation }) {
         </View>
         <Text style={styles.successTitle}>Pedido registrado</Text>
         <Text style={styles.successDescription}>
-          Pedido #{createdOrder.id} · {createdOrder.status}
+          Pedido #{createdOrder.id} · {orderStatus}
           {'\n'}Total confirmado pelo servidor: {formatCurrency(createdOrder.totalAmount)}
           {'\n'}{paymentStatus
             ? `Pagamento: ${paymentStatus}`
             : 'Aguardando confirmação do pagamento.'}
         </Text>
+        <SimulatedPaymentNotice provider={paymentProvider} style={styles.successNotice} />
         {paymentError ? (
           <Text accessibilityRole="alert" style={styles.successError}>{paymentError}</Text>
         ) : null}
         {cartClearWarning ? (
           <Text accessibilityRole="alert" style={styles.successError}>{cartClearWarning}</Text>
         ) : null}
-        <Pressable
-          accessibilityRole="button"
-          disabled={isLaunchingPayment}
-          onPress={() => launchPayment(createdOrder)}
-          style={styles.successButton}
-        >
-          <Text style={styles.successButtonText}>
-            {isLaunchingPayment ? 'Abrindo pagamento...' : 'Abrir pagamento no Stripe'}
-          </Text>
-        </Pressable>
+        {paymentStatus === 'APPROVED' ? null : (
+          <Pressable
+            accessibilityRole="button"
+            disabled={isLaunchingPayment}
+            onPress={() => launchPayment(createdOrder)}
+            style={styles.successButton}
+          >
+            <Text style={styles.successButtonText}>
+              {isLaunchingPayment
+                ? 'Abrindo pagamento...'
+                : paymentProvider === 'simulated'
+                  ? 'Abrir pagamento'
+                  : 'Abrir pagamento no Stripe'}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate('MainTabs', {
@@ -714,6 +736,7 @@ const styles = StyleSheet.create({
   },
   successTitle: { color: colors.ink, fontSize: 22, fontWeight: '800', textAlign: 'center' },
   successDescription: { color: colors.muted, fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 11 },
+  successNotice: { textAlign: 'center', marginTop: 12 },
   successError: { color: colors.danger, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12 },
   successButton: {
     minHeight: 50,

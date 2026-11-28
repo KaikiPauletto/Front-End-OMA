@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppHeader } from '../components/AppHeader';
+import { SimulatedPaymentNotice } from '../components/SimulatedPaymentNotice';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrders } from '../contexts/OrdersContext';
 import { clearPendingPaymentReturn, savePendingPaymentReturn } from '../services/browserSession';
@@ -177,6 +178,7 @@ export function PaymentResultScreen({ navigation, route }) {
           {payment && Number.isFinite(payment.amount) && payment.currency === 'BRL' ? (
             <Text style={styles.amount}>{formatCurrency(payment.amount)}</Text>
           ) : null}
+          <SimulatedPaymentNotice provider={payment?.provider} style={styles.notice} />
           {isPolling && view.kind !== 'checking' ? (
             <View style={styles.pollingRow}>
               <ActivityIndicator size="small" color={colors.muted} />
@@ -228,6 +230,7 @@ const styles = StyleSheet.create({
   message: { color: colors.mutedStrong, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   errorMessage: { color: colors.danger },
   amount: { color: colors.forest, fontSize: 16, fontWeight: '800', marginTop: 4 },
+  notice: { textAlign: 'center' },
   pollingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   pollingText: { color: colors.muted, fontSize: 11 },
   primaryButton: {
