@@ -20,7 +20,6 @@ import {
   createProduct,
   listCategories,
   listSubcategories,
-  normalizeProductImageUrl,
   uploadProductImage,
 } from '../services/productService';
 import {
@@ -126,7 +125,6 @@ export function AddSellerProductScreen({ navigation }) {
   const [model, setModel] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [description, setDescription] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
   const [imageAssets, setImageAssets] = useState([]);
   const [productType, setProductType] = useState('');
   const [initialQuantity, setInitialQuantity] = useState('');
@@ -253,13 +251,6 @@ export function AddSellerProductScreen({ navigation }) {
       setSubmitError(quantityValidation.error);
       return;
     }
-    let normalizedImageUrl;
-    try {
-      normalizedImageUrl = normalizeProductImageUrl(imageUrl);
-    } catch (error) {
-      setSubmitError(error.message);
-      return;
-    }
     if (typeof token !== 'string' || !token.trim()) {
       setSubmitError('Sua sessão não está válida. Entre novamente como administrador.');
       return;
@@ -280,7 +271,6 @@ export function AddSellerProductScreen({ navigation }) {
         price: parsedPrice,
         subcategoryId,
         productType,
-        ...(normalizedImageUrl ? { image: normalizedImageUrl } : {}),
       }, token);
       const productId = String(createdProduct.id);
       const quantity = quantityValidation.quantity;
@@ -563,29 +553,11 @@ export function AddSellerProductScreen({ navigation }) {
             : 'Informe uma quantidade inteira de 0 até o limite suportado pela API.'}
         </Text>
 
-        <Text style={styles.label}>URL da imagem (opcional)</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!isFormLocked}
-          keyboardType="url"
-          onChangeText={(value) => {
-            setImageUrl(value);
-            setImageAssets([]);
-            setSubmitError('');
-          }}
-          placeholder="https://exemplo.com/imagem.jpg"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={imageUrl}
-        />
+        <Text style={styles.label}>Imagens do produto</Text>
         <ProductImagesPicker
           selectedAssets={imageAssets}
           onChange={(assets) => {
             setImageAssets(assets);
-            if (assets.length > 0) {
-              setImageUrl('');
-            }
             setSubmitError('');
           }}
           disabled={isFormLocked}

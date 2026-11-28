@@ -4,28 +4,11 @@ import {
   createProduct,
   getProductById,
   listAdminConfirmedSales,
-  normalizeProductImageUrl,
   updateProduct,
   uploadProductImage,
 } from '../src/services/productService.js';
 
-test('product image URL accepts HTTP URLs and rejects malformed or unsafe URLs', () => {
-  assert.equal(
-    normalizeProductImageUrl('  https://images.example/cuia.jpg  '),
-    'https://images.example/cuia.jpg',
-  );
-  assert.equal(normalizeProductImageUrl('  '), null);
-  assert.throws(
-    () => normalizeProductImageUrl('not-a-url'),
-    /URL válida/,
-  );
-  assert.throws(
-    () => normalizeProductImageUrl('javascript:alert(1)'),
-    /http:\/\/ ou https:\/\//,
-  );
-});
-
-test('product creation and editing send the selected image URL to the API', async () => {
+test('product creation and editing preserve explicitly supplied legacy image URLs', async () => {
   const previousUrl = process.env.EXPO_PUBLIC_API_URL;
   const previousFetch = globalThis.fetch;
   process.env.EXPO_PUBLIC_API_URL = 'https://gateway.example';

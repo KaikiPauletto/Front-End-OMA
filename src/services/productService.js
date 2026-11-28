@@ -18,26 +18,6 @@ export class InvalidCatalogResponseError extends Error {
   }
 }
 
-export function normalizeProductImageUrl(value) {
-  const imageUrl = typeof value === 'string' ? value.trim() : '';
-  if (!imageUrl) {
-    return null;
-  }
-
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(imageUrl);
-  } catch {
-    throw new Error('Informe uma URL válida para a imagem do produto.');
-  }
-
-  if (!['http:', 'https:'].includes(parsedUrl.protocol) || !parsedUrl.hostname) {
-    throw new Error('A URL da imagem deve começar com http:// ou https://.');
-  }
-
-  return imageUrl;
-}
-
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
